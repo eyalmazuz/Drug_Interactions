@@ -96,7 +96,7 @@ class DeepSmiles(tf.keras.Model):
         self.atomsize = metadata['atomsize']
         self.vocab_size = metadata['vocab_size']
 
-        self.lensize = metadata['lensize']
+        self.len_info = metadata['len_info']
 
         self.grus = []
         for _ in range(metadata['gru_layers']):
@@ -156,4 +156,4 @@ def get_model(model_type: ModelTypes, metadata:Dict[str, Any]):
         return AFMP(metadata)
 
     if model_type == ModelTypes.SMILES:
-        return SmilesModel(metadata)
+        return DeepSmiles(metadata)

@@ -23,10 +23,17 @@ def main():
     print(sum(map(len, [drug.interactions for drug in old_drug_bank.drugs])))
     print(sum(map(len, [drug.interactions for drug in new_drug_bank.drugs])))
 
-    train_dataset, validation_dataset, test_dataset, metadata = get_dataset(DatasetTypes.COLD_START, old_drug_bank,
-                                                                            new_drug_bank, neg_pos_ratio=1.0, validation_size=0.2)
+    train_dataset, validation_dataset, test_dataset, metadata = get_dataset(DatasetTypes.SMILES, old_drug_bank,
+                                                                            new_drug_bank, neg_pos_ratio=1.0, validation_size=0.2,
+                                                                            atom_size=300, atom_info=21, struct_info=21)
 
-    metadata = {**metadata, **{"embedding_size": 128, "dropout_rate": 0.3, "num_classes": 1, "propegation_factor": 0.4}}
+    metadata = {**metadata, 
+                **{"embedding_size": 128,
+                   "dropout_rate": 0.3,
+                   "num_classes": 1,
+                   "propegation_factor": 0.4,
+                   "atom_size": 300,
+                   "len_size": 42}}
 
     model = get_model(ModelTypes.AFMP, metadata)
 
