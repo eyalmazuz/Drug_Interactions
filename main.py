@@ -25,7 +25,7 @@ def main():
 
     train_dataset, validation_dataset, test_dataset, metadata = get_dataset(DatasetTypes.SMILES, old_drug_bank,
                                                                             new_drug_bank, neg_pos_ratio=1.0, validation_size=0.2,
-                                                                            atom_size=300, atom_info=21, struct_info=21)
+                                                                            atom_size=300)
 
     metadata = {**metadata, 
                 **{"embedding_size": 128,

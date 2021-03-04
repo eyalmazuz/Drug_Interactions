@@ -8,10 +8,10 @@ from typing import List, Dict, Tuple, Optional, Any
 import random
 
 import numpy as np
-from rdkit import Chem
-from rdkit.Chem import rdchem
-from rdkit import RDLogger
-RDLogger.DisableLog('rdApp.info')
+# from rdkit import Chem
+# from rdkit.Chem import rdchem
+# from rdkit import RDLogger
+# RDLogger.DisableLog('rdApp.info')
 import tensorflow as tf
 from tqdm import tqdm
 
@@ -66,7 +66,7 @@ class DrugDataset(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def smaple_data(self, data: Any, new_drug_idxs: Any, neg_pos_ratio: float) -> Tuple[Any, List[int]]:
+    def sample_data(self, data: Any, new_drug_idxs: Any, neg_pos_ratio: float) -> Tuple[Any, List[int]]:
         """
         Generate a sample from the data with equal number of positive and negative instances.
 
@@ -160,15 +160,13 @@ class ColdStartDrugDataset(DrugDataset):
 
         return negative_samples, negative_labels
 
-    def smaple_data(self, negative_instances: List[Tuple[int, int]],
-                   len_positive: int,  neg_pos_ratio: float=1.0,) -> Tuple[List[Tuple[int, int]], List[int]]:
+    def sample_data(self, negative_instances: List[Tuple[int, int]], len_positive: int) -> Tuple[List[Tuple[int, int]], List[int]]:
         """
         Generate a sample from the data with equal number of positive and negative instances.
 
         Args:
             negative_instances: List of drug pairs which have no interaction in the data
             len_positive: the number of positive interaction in the dataset.
-            neg_pos_ratio: the sample ratio between negative and positive instnaces.
 
         Returns:
             x_train: A list of pairs of drug interactions from train_data.
@@ -176,9 +174,9 @@ class ColdStartDrugDataset(DrugDataset):
         """
         print(f'{len(negative_instances)=}')
         print(f'{len_positive=}')
-        if len_positive < len(negative_instances) and neg_pos_ratio is not None:
+        if len_positive < len(negative_instances) and self.neg_pos_ratio is not None:
             print('There are less positive cells so sampling from the negative cells')
-            negative_indexes = random.sample(range(len(negative_instances)), k=int(neg_pos_ratio * len_positive))
+            negative_indexes = random.sample(range(len(negative_instances)), k=int(self.neg_pos_ratio * len_positive))
 
             negative_instances = [negative_instances[i] for i in negative_indexes]
             print('done sampling')
@@ -270,8 +268,7 @@ class ColdStartDrugDataset(DrugDataset):
         positive_samples, positive_labels = self.get_positive_instances(train_data, new_drug_idxs)
         negative_samples, negative_labels = self.get_negative_instances(train_data, new_drug_idxs)
 
-        negative_samples, negative_labels = self.smaple_data(negative_samples, len(positive_labels),
-                                                            neg_pos_ratio=self.neg_pos_ratio)
+        negative_samples, negative_labels = self.sample_data(negative_samples, len(positive_labels))
 
         x = positive_samples + negative_samples
         y = positive_labels + negative_labels
@@ -328,26 +325,54 @@ class SmilesDrugDataset(DrugDataset):
     def __init__(self, old_drug_bank: DrugBank, new_drug_bank: DrugBank, neg_pos_ratio: float=1.0, **kwargs):
         super().__init__(old_drug_bank, new_drug_bank, neg_pos_ratio)
         self.atom_size = kwargs['atom_size']
-        self.atom_info = kwargs['atom_info']
-        self.struct_info = kwargs['struct_info']
+        # self.atom_info = kwargs['atom_info']
+        # self.struct_info = kwargs['struct_info']
 
-    def get_positive_instances(self):
-        pass
+    def get_positive_instances(self, data, new_drug_idxs=None):
 
-    def get_negative_instances(self):
-        pass
+        data, labels = data
+        print('getiing positive samples')
+        idxs = np.where(np.array(labels) == 1)[0]
+        pos_data = [data[i] for i in tqdm(idxs, 'positive')]
+        labels = [1] * len(pos_data)
 
-    def smaple_data(self):
-        pass
+        return pos_data, labels
+
+    def get_negative_instances(self, data, new_drug_idxs=None):
+
+        data, labels = data
+        print('getting negative samples')
+        idxs = np.where(np.array(labels) == 0)[0]
+        neg_data = [data[i] for i in tqdm(idxs, 'negative')]
+        labels = [0] * len(neg_data)
+
+        return neg_data, labels
+
+    def sample_data(self, negative_instances: List[Tuple[int, int]], len_positive: int) -> Tuple[List[Tuple[int, int]], List[int]]:
+        
+        print(f'{len(negative_instances)=}')
+        print(f'{len_positive=}')
+        if len_positive < len(negative_instances) and self.neg_pos_ratio is not None:
+            print('There are less positive cells so sampling from the negative cells')
+            negative_indexes = random.sample(range(len(negative_instances)), k=int(self.neg_pos_ratio * len_positive))
+
+            negative_instances = [negative_instances[i] for i in negative_indexes]
+            print('done sampling')
+        negative_labels = [0] * len(negative_instances)
+        
+        return negative_instances, negative_labels
 
     def create_data(self):
         
         train_drug_ids, test_drug_ids = set(self.old_drug_bank.id_to_drug.keys()), set(self.new_drug_bank.id_to_drug.keys())
-        sorted_drug_ids = sorted(list(train_drug_ids | test_drug_ids))
         new_drug_ids = test_drug_ids - (train_drug_ids & test_drug_ids)
 
-        test_drug_pairs = list(product(new_drug_ids, train_drug_ids)) + list(product(new_drug_ids, new_drug_ids))
+
         train_drug_pairs = list(product(train_drug_ids, train_drug_ids))
+        train_drug_pairs = list(set([tuple(sorted(t)) for t in train_drug_pairs if t[0] != t[1]]))
+
+        test_drug_pairs = list(product(new_drug_ids, train_drug_ids))
+        test_drug_pairs += list(set([tuple(sorted(t)) for t in list(product(new_drug_ids, new_drug_ids)) if t[0] != t[1]]))
 
         drug_to_smiles = {}
         for drug in self.old_drug_bank.drugs:
@@ -357,55 +382,96 @@ class SmilesDrugDataset(DrugDataset):
             drug_to_smiles[drug.id_] = drug.smiles
 
         drug_to_smiles_features = self.get_smiles_features(drug_to_smiles)
-        drug_to_cnn_features = self.get_cnn_features(drug_to_smiles)
 
-        print(f'{len(drug_to_cnn_features.keys())=}')
-        train_smiles_features_a = []
-        train_cnn_features_a = []
-        train_smiles_features_b = []
-        train_cnn_features_b = []
+        train_smiles_features = []
         train_labels = []
         for drug_a, drug_b in tqdm(train_drug_pairs, desc='building train pairs'):
-            train_cnn_features_a.append(drug_to_cnn_features[drug_a])
-            train_smiles_features_a.append(drug_to_smiles_features[drug_a])
- 
-            train_cnn_features_b.append(drug_to_cnn_features[drug_b])
-            train_smiles_features_b.append(drug_to_smiles_features[drug_b])
-
+            train_smiles_features.append((drug_to_smiles_features[drug_a], drug_to_smiles_features[drug_b]))
             train_labels += [1] if self.old_drug_bank.id_to_drug[drug_a].interacts_with(self.old_drug_bank.id_to_drug[drug_b]) else [0]
 
-        test_smiles_features_a = []
-        test_cnn_features_a = []
-        test_smiles_features_b = []
-        test_cnn_features_b = []
+        test_smiles_features = []
         test_labels = []
         for drug_a, drug_b in tqdm(test_drug_pairs, desc='building test pairs'):
-            test_cnn_features_a.append(drug_to_cnn_features[drug_a])
-            test_smiles_features_a.append(drug_to_smiles_features[drug_a])
-            test_cnn_features_b.append(drug_to_cnn_features[drug_b])
-            test_smiles_features_b.append(drug_to_smiles_features[drug_b])
-
+            test_smiles_features.append((drug_to_smiles_features[drug_a], drug_to_smiles_features[drug_b]))
             try:
                 test_labels += [1] if self.new_drug_bank.id_to_drug[drug_a].interacts_with(self.new_drug_bank.id_to_drug[drug_b]) else [0]
             except:
                 test_labels += [1] if self.new_drug_bank.id_to_drug[drug_a].interacts_with(self.old_drug_bank.id_to_drug[drug_b]) else [0]
         
-        return (test_smiles_features_a, test_cnn_features_a, test_smiles_features_b, test_cnn_features_b, test_labels),\
-                (train_smiles_features_a, train_cnn_features_a, train_smiles_features_b, train_cnn_features_b, train_labels), test_drug_pairs, {}
+        return (train_smiles_features, train_labels), (test_smiles_features, test_labels), test_drug_pairs, {}
 
     def build_dataset(self, validation_size: float=0.2):
         
         self.old_drug_bank = self.get_smiles_drugs(self.old_drug_bank)
         self.new_drug_bank = self.get_smiles_drugs(self.new_drug_bank)
 
-        train_data, test_data, new_drug_idxs, metadata = self.create_data()
+        train_data, test_data, _, metadata = self.create_data()
 
-        # TODO continue here
-        return [], [], [], []
+        positive_instances, positive_labels = self.get_positive_instances(train_data)
+        negative_instances, negative_labels = self.get_negative_instances(train_data)
+
+        negative_instances, negative_labels = self.sample_data(negative_instances, len(positive_instances))
+
+        x = positive_instances + negative_instances
+        y = positive_labels + negative_labels
+        metadata['data_size'] =len(y)
+        print(f'{len(y)=}')
+
+        print('Creating validation set.')
+        if validation_size is not None:
+            validation_indexes = random.sample(range(len(x)), k=int(validation_size * len(x)))
+            train_indexes = list(set(range(len(x))) - set(validation_indexes))
+
+            x_val = [x[i] for i in validation_indexes]
+            y_val = [y[i] for i in validation_indexes]
+
+            x_train = [x[i] for i in train_indexes]
+            y_train = [y[i] for i in train_indexes]
+
+        print('Generating dataset objects')
+
+        x_train = list(map(np.array, zip(*x_train)))
+        x_val = list(map(np.array, zip(*x_val)))
+
+        # train_input = tf.data.Dataset.from_generator(self.data_generator, args=[x_train], output_types=(tf.int64, tf.int64))
+        train_input = tf.data.Dataset.from_tensor_slices((x_train[0], x_train[1]))
+        train_labels = tf.data.Dataset.from_tensor_slices(y_train)
+        train_dataset = tf.data.Dataset.zip((train_input, train_labels))
+
+        # validation_input = tf.data.Dataset.from_generator(self.data_generator, args=[x_val], output_types=(tf.int64, tf.int64))
+        validation_input = tf.data.Dataset.from_tensor_slices((x_val[0], x_val[1]))
+        validation_labels = tf.data.Dataset.from_tensor_slices(y_val)
+        validation_dataset = tf.data.Dataset.zip((validation_input, validation_labels))
+
+        test_dataset = self.build_test_dataset(test_data)
+
+        return train_dataset, validation_dataset, test_dataset, metadata
     
-    def build_test_dataset(self):
-        pass
+    def build_test_dataset(self, test_data, new_drug_idxs: List[Tuple[int, int]]=None) -> tf.data.Dataset:
+        """
+        Creating test dataset from the new drug indexes and test matrix.
+        """
+        print('Creating input data.')
 
+        test_instances, test_labels = test_data
+
+        x_test = list(map(np.array, zip(*test_instances)))
+        
+        print('Creating labels.')
+        y_test = test_labels
+        print(f'{len(y_test)=}')
+
+        print('Building dataset object.')
+        test_input = tf.data.Dataset.from_tensor_slices((x_test[0], x_test[1]))
+        # test_input = tf.data.Dataset.from_generator(self.data_generator, args=[x_test], output_types=(tf.int64, tf.int64))
+        test_labels = tf.data.Dataset.from_tensor_slices(y_test)
+        test_dataset = tf.data.Dataset.zip((test_input, test_labels))
+        return test_dataset
+
+    def data_generator(self, data):
+
+        for drug_a, drug_b in data:
+            yield drug_a, drug_b
 
     def get_smiles_drugs(self, drug_bank: DrugBank):
         """
@@ -420,184 +486,19 @@ class SmilesDrugDataset(DrugDataset):
         """
         valid_drug_ids = []
         for drug in drug_bank.drugs:
-            if drug.smiles is not None:
-                try:
-                    if len(Chem.MolToSmiles(Chem.MolFromSmiles(drug.smiles), kekuleSmiles=True, isomericSmiles=True)) > self.atom_size: # pylint: disable=maybe-no-member
-                        valid_drug_ids.append(drug.id_)
-                    else:
-                        valid_drug_ids.append(drug.id_)
-                except:
-                    pass
+            if drug.smiles is not None and len(drug.smiles) < self.atom_size:
+                valid_drug_ids.append(drug.id_)
+
         drugs_with_smiles = [drug for drug in drug_bank.drugs if drug.id_ in valid_drug_ids]
-        for drug in tqdm(drugs_with_smiles, desc='filtering'):
+        for drug in tqdm(drugs_with_smiles, desc='filtering interactions'):
             new_interactions = [(drug_id, interaction) for drug_id, interaction in drug.interactions if drug_id in valid_drug_ids]
             drug.interactions = set(new_interactions)
+
         print(f'{len(drugs_with_smiles)=}')
         drugs_with_smiles = [drug for drug in drugs_with_smiles if len(drug.interactions) > 0]
         print(f'{len(drugs_with_smiles)=}')
         new_bank = DrugBank(drug_bank.version, drugs_with_smiles)
         return new_bank
-
-    def islower(self, s):
-        lowerReg = re.compile(r'^[a-z]+$')
-        return lowerReg.match(s) is not None
-
-    def isupper(self, s):
-        upperReg = re.compile(r'^[A-Z]+$')
-        return upperReg.match(s) is not None
-
-    def calc_atom_feature(self, atom):
-        
-        Chiral = {"CHI_UNSPECIFIED":0,  "CHI_TETRAHEDRAL_CW":1, "CHI_TETRAHEDRAL_CCW":2, "CHI_OTHER":3}
-        Hybridization = {"UNSPECIFIED":0, "S":1, "SP":2, "SP2":3, "SP3":4, "SP3D":5, "SP3D2":6, "OTHER":7}
-        
-        if atom.GetSymbol() == 'H':   feature = [1,0,0,0,0]
-        elif atom.GetSymbol() == 'C': feature = [0,1,0,0,0]
-        elif atom.GetSymbol() == 'O': feature = [0,0,1,0,0]
-        elif atom.GetSymbol() == 'N': feature = [0,0,0,1,0]
-        else: feature = [0,0,0,0,1]
-            
-        feature.append(atom.GetTotalNumHs()/8)
-        feature.append(atom.GetTotalDegree()/4)
-        feature.append(atom.GetFormalCharge()/8)
-        feature.append(atom.GetTotalValence()/8)
-        feature.append(atom.IsInRing()*1)
-        feature.append(atom.GetIsAromatic()*1)
-
-        f =  [0]*(len(Chiral)-1)
-        if Chiral.get(str(atom.GetChiralTag()), 0) != 0:
-            f[Chiral.get(str(atom.GetChiralTag()), 0)] = 1
-        feature.extend(f)
-
-        f =  [0]*(len(Hybridization)-1)
-        if Hybridization.get(str(atom.GetHybridization()), 0) != 0:
-            f[Hybridization.get(str(atom.GetHybridization()), 0)] = 1
-        feature.extend(f)
-        
-        return(feature)
-
-
-    def calc_structure_feature(self, c, flag, label):
-        feature = [0] * self.struct_info
-
-        if c== '(' :
-            feature[0] = 1
-            flag = 0
-        elif c== ')' :
-            feature[1] = 1
-            flag = 0
-        elif c== '[' :
-            feature[2] = 1
-            flag = 0
-        elif c== ']' :
-            feature[3] = 1
-            flag = 0
-        elif c== '.' :
-            feature[4] = 1
-            flag = 0
-        elif c== ':' :
-            feature[5] = 1
-            flag = 0
-        elif c== '=' :
-            feature[6] = 1
-            flag = 0
-        elif c== '#' :
-            feature[7] = 1
-            flag = 0
-        elif c== '\\':
-            feature[8] = 1
-            flag = 0
-        elif c== '/' :
-            feature[9] = 1
-            flag = 0  
-        elif c== '@' :
-            feature[10] = 1
-            flag = 0
-        elif c== '+' :
-            feature[11] = 1
-            flag = 1
-        elif c== '-' :
-            feature[12] = 1
-            flag = 1
-        elif c.isdigit() == True:
-            if flag == 0:
-                if c in label:
-                    feature[20] = 1
-                else:
-                    label.append(c)
-                    feature[19] = 1
-            else:
-                feature[int(c)-1+12] = 1
-                flag = 0
-        return(feature,flag,label)
-
-
-    def calc_featurevector(self, mol, smiles):
-        flag = 0
-        label = []
-        molfeature = []
-        idx = 0
-        j = 0
-        H_Vector = [0] * self.atom_info
-        H_Vector[0] = 1
-        lensize = self.atom_info + self.struct_info
-
-                
-        for c in smiles:
-            if self.islower(c) == True: continue
-            elif self.isupper(c) == True:
-                if c == 'H':
-                    molfeature.extend(H_Vector)
-                else:
-                    molfeature.extend(self.calc_atom_feature(rdchem.Mol.GetAtomWithIdx(mol, idx)))
-                    idx = idx + 1
-                molfeature.extend([0] * self.struct_info)
-                j = j +1
-                
-            else:   
-                molfeature.extend([0] * self.atom_info)
-                f, flag, label = self.calc_structure_feature(c, flag, label)
-                molfeature.extend(f)
-                j = j +1
-
-        #0-Padding
-        molfeature.extend([0] * (self.atom_size - j) * lensize)
-        # print(f'{len(molfeature)=}')
-        return molfeature
-
-
-    def mol_to_feature(self, mol, n):
-        try: 
-            defaultSMILES = Chem.MolToSmiles(mol, kekuleSmiles=False, isomericSmiles=True, rootedAtAtom=int(n)) # pylint: disable=maybe-no-member
-        except:
-            print('failed first') 
-            defaultSMILES = Chem.MolToSmiles(mol, kekuleSmiles=False, isomericSmiles=True) # pylint: disable=maybe-no-member
-        try: 
-            isomerSMILES = Chem.MolToSmiles(mol, kekuleSmiles=True, isomericSmiles=True, rootedAtAtom=int(n)) # pylint: disable=maybe-no-member
-        except: 
-            print('failed second')
-            isomerSMILES = Chem.MolToSmiles(mol, kekuleSmiles=True, isomericSmiles=True) # pylint: disable=maybe-no-member
-        return self.calc_featurevector(Chem.MolFromSmiles(defaultSMILES), isomerSMILES) # pylint: disable=maybe-no-member
-
-
-    def get_cnn_features(self, drug_to_smiles: Dict[str, str]) -> Dict[str, np.array]:
-        lensize = self.atom_info + self.struct_info
-        drug_to_cnn_features = {}
-        for drug_id, smiles in tqdm(drug_to_smiles.items(), desc='cnn'):
-            try:
-                mol = Chem.MolFromSmiles(smiles) # pylint: disable=maybe-no-member
-                cnn_feat = self.mol_to_feature(mol, -1)
-                cnn_feat = np.array(cnn_feat)
-                # print(cnn_feat.shape)
-                cnn_feat = cnn_feat[:self.atom_size * lensize].reshape(self.atom_size, lensize, 1)
-                drug_to_cnn_features[drug_id] = cnn_feat
-            except:
-                print(f'{cnn_feat.shape=}')
-                print('error')
-        # print('------------------------------------------------')
-        # print('CNN Features Creation Completed Successfuly')
-        # print('CNN Features Shape are: {}.'.format(data_f.shape))
-        return drug_to_cnn_features
 
     def get_smiles_features(self, drug_to_smiles: Dict[str, str]) -> Dict[str, np.array]:
         # print(f'{drug_to_smiles=}')
@@ -631,7 +532,7 @@ class IntersectionDrugDataset(DrugDataset):
     def get_negative_instances(self):
         pass
 
-    def smaple_data(self):
+    def sample_data(self):
         pass
 
     def create_data(self):

@@ -71,7 +71,7 @@ class ColdStartDrugDatasetTestCase(TestCase):
                                                      [0, 0, 1, 0, 0, 0 ,0, 0],
                                                      [0, 0, 0, 0, 0, 0 ,0, 1]])}
 
-        drug_to_smiles_features = self.dataset.get_smiles_feature(drug_to_smiles)
+        drug_to_smiles_features = self.dataset.get_smiles_features(drug_to_smiles)
         # print(drug_to_smiles_features)
         self.assertCountEqual(drug_to_smiles_features, drug_to_smiles_features_gt)
 
