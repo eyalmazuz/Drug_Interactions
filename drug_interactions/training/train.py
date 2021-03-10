@@ -44,11 +44,9 @@ class Trainer():
         self.loss_fn = tf.keras.losses.BinaryCrossentropy(from_logits=False)
         self.optimizer = tf.keras.optimizers.Adam()
         self.train_metrics = [tf.keras.metrics.BinaryCrossentropy(name='Train BCE'),
-                        tf.keras.metrics.Accuracy(name='Train Accuracy'),
                         tf.keras.metrics.AUC(name='Train AUC')]
         
         self.val_metrics = [tf.keras.metrics.BinaryCrossentropy(name='Validation BCE'),
-                        tf.keras.metrics.Accuracy(name='Validation Accuracy'),
                         tf.keras.metrics.AUC(name='Validation AUC')]
 
     def train(self, model, train_dataset, validation_dataset, epochs: int=5, batch_size: int=1024, validation_size: int=1000, buffer_size=1000000):
@@ -83,7 +81,7 @@ class Trainer():
                     for metric in self.train_metrics:
                         print(f'{metric.name}: {metric.result().numpy()}', end=' ')
                     print()
-            model.propegate_weights()
+            # model.propegate_weights()
             print(f'Epoch: {epoch + 1} finished')
 
             for _, (inputs, labels) in tqdm(enumerate(validation_dataset)):
@@ -142,7 +140,6 @@ class Trainer():
         print('Building test dataset.')
         test_dataset = test_dataset.shuffle(buffer_size).batch(batch_size)
         test_metrics = [tf.keras.metrics.BinaryCrossentropy(name='Test BCE'),
-                        tf.keras.metrics.Accuracy(name='Test Accuracy'),
                         tf.keras.metrics.AUC(name='Test AUC')]
 
         for metric in test_metrics:

@@ -1,19 +1,10 @@
-from enum import Enum
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 from typing import Dict, List, Any
 
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Embedding, Add, Dropout, Multiply, Conv2D, BatchNormalization, AveragePooling2D, \
                                 Concatenate, Flatten, Dense, InputLayer, GRU, Bidirectional, GlobalMaxPool2D
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import Callback
 
-
-class ModelTypes(Enum):
-    AFMP = 1
-    SMILES = 2
 
 class AFMP(tf.keras.Model):
 
@@ -85,79 +76,4 @@ class AFMP(tf.keras.Model):
 
         old_drug_embs = weights[old_drug_ids, :]
 
-        return old_drug_embs.mean(axis=0)
-
-
-class DeepSmiles(tf.keras.Model):
-
-    def __init__(self, metadata):
-        super(DeepSmiles, self).__init__()
-
-        self.atomsize = metadata['atomsize']
-        self.vocab_size = metadata['vocab_size']
-
-        self.len_info = metadata['len_info']
-
-        self.grus = []
-        for _ in range(metadata['gru_layers']):
-            self.grus.append(Bidirectional(GRU(units=metadata['gru_units'], dropout=metadata['gru_dropout_date']), merge_mode='ave'))
-
-        # self.conv1 = Conv2D(filters=32, kernel_size=(3, 42), strides=1, padding=(1, 0))
-        # self.bn1 = BatchNormalization()
-        # self.conv2 = self.conv1 = Conv2D(filters=32, kernel_size=(3, 1), strides=1, padding=(1, 0))
-        # self.bn2 = BatchNormalization()
-        # self.bn3 = BatchNormalization()
-        # self.fcnn3 = Dense(units=64)
-        self.fc1 = Dense(units=64, activation='relu')
-        self.dropout = Dropout(rate=metadata['dropout_rate'])
-        self.fc2 = Dense(units=1, activation='sigmoid')
-
-    def call(self, inputs, training, **kwargs):
-
-        drug_a_smiles, drug_b_smiles = inputs
-        # drug_a_cnn, drug_a_smiles = drug_a
-        # drug_b_cnn, drug_b_smiles = drug_b
-
-        drug_a_out = self.gru_forward(drug_a_smiles, training=training)
-        drug_b_out = self.gru_forward(drug_b_smiles, training=training)
-
-        # concat = tf.concat([drug_cnn, drug_smiles], -1) 
-
-        concat = tf.concat([drug_a_out, drug_b_out], -1)
-        
-        dense = self.fc1(concat)
-        dense = self.dropout(dense)
-
-        logits = self.fc2(dense)
-
-        return logits
-
-    def gru_forward(self, drug_smiles, training):
-
-        for gru in self.grus:
-            drug_smiles = gru(drug_smiles)
-
-        return drug_smiles
-
-    # def cnn_forward(self, drug_cnn, training):
-        
-    #     drug_cnn = tf.nn.leaky_relu(self.bn1(self.conv1(drug_cnn), training=training))
-    #     drug_cnn = tf.nn.avg_pool2d(drug_cnn, ksize=(5, 1), strides=1, padding=(2, 0))
-    #     drug_cnn = tf.nn.leaky_relu(self.bn2(self.conv2(drug_cnn), training=training))
-    #     drug_cnn = tf.nn.avg_pool2d(drug_cnn, ksize=(5, 1), strides=1, padding=(2, 0))
-    #     drug_cnn = GlobalMaxPool2D()(self.dropout(drug_cnn, training=training))
-    #     drug_cnn = tf.squeeze(drug_cnn, -1)
-    #     drug_cnn = tf.squeeze(drug_cnn, -1)
-    #     drug_cnn = tf.nn.leaky_relu(self.bn3(self.fcnn3(drug_cnn), training=training))
-    #     drug_cnn = self.dropout(drug_cnn, training=training)
-
-    #     return drug_cnn     
-
-
-def get_model(model_type: ModelTypes, metadata:Dict[str, Any]):
-
-    if model_type == ModelTypes.AFMP:
-        return AFMP(metadata)
-
-    if model_type == ModelTypes.SMILES:
-        return DeepSmiles(metadata)
+        return old_drug_embs.mean(axis=0)   
