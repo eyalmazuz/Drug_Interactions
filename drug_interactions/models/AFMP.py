@@ -17,10 +17,11 @@ class AFMPConfig():
         self.propegation_factor = propegation_factor
         self.num_classes = num_classes
         self.use_mean_vector = use_mean_vector
+        self.kwargs = kwargs
 
 class AFMP(tf.keras.Model):
 
-    def __init__(self, config: AFMPConfig, **kwargs):
+    def __init__(self, config: AFMPConfig):
         super(AFMP, self).__init__()
 
         self.drug_embedding = Embedding(input_dim=config.num_drugs+1, output_dim=config.embedding_size, name='Embedding')
@@ -29,7 +30,7 @@ class AFMP(tf.keras.Model):
         self.dropout = Dropout(config.dropout_rate, name='Dropout')
         self.dense = Dense(units=config.num_classes, activation='sigmoid')
 
-        self.drug_graph = kwargs['drug_graph']
+        self.drug_graph = config.kwargs['drug_graph']
         self.propegation_factor = config.propegation_factor
         self.use_mean_vector = config.use_mean_vector
 

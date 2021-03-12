@@ -31,10 +31,10 @@ def get_model(model_type: DatasetTypes, **kwargs):
     config = get_config(model_type, **kwargs)
 
     if model_type == DatasetTypes.COLD_START:
-        return AFMP(config, **kwargs)
+        return AFMP(config)
 
     if model_type == DatasetTypes.ONEHOT_SMILES:
-        return CharSmiles(config, **kwargs)
+        return CharSmiles(config)
 
     if model_type == DatasetTypes.DEEP_SMILES:
-        return DeepSmiles(config, **kwargs)
+        return DeepSmiles(config)

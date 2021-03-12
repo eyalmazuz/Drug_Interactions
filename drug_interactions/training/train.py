@@ -7,6 +7,7 @@ import tensorflow as tf
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score, confusion_matrix
 
+from drug_interactions.utils import webhook_url, send_message
 from drug_interactions.reader.dal import DrugBank
 from drug_interactions.reader.preprocessor import DrugPreprocessor
 
@@ -49,7 +50,8 @@ class Trainer():
         self.val_metrics = [tf.keras.metrics.BinaryCrossentropy(name='Validation BCE'),
                         tf.keras.metrics.AUC(name='Validation AUC')]
 
-    def train(self, model, train_dataset, validation_dataset, epochs: int=5, batch_size: int=1024, buffer_size=1000):
+    def train(self, model, train_dataset, validation_dataset, epochs: int=5,
+                    batch_size: int=1024, buffer_size=1000, **kwargs):
         """
         Trains the model.
         
@@ -73,26 +75,30 @@ class Trainer():
                 metric.reset_states()
 
             for i, (inputs, labels) in tqdm(enumerate(train_dataset)):
-                self.__train_step(model, inputs, labels)
+                self.__train_step(model, inputs, labels, **kwargs)
 
                 if (i + 1) % 200 == 0:
                     for metric in self.train_metrics:
                         print(f'{metric.name}: {metric.result().numpy()}', end=' ')
+                        send_message(f'Step {(i + 1)}: {metric.name}: {metric.result().numpy()}')
                     print()
+
             # model.propegate_weights()
             print(f'Epoch: {epoch + 1} finished')
+            send_message(f'Epoch: {epoch + 1} finished')
 
             for _, (inputs, labels) in tqdm(enumerate(validation_dataset)):
-                self.__validation_step(model, inputs, labels)
+                self.__validation_step(model, inputs, labels, **kwargs)
             
             for metric in self.val_metrics:
                 print(f'{metric.name}: {metric.result().numpy()}', end=' ')
+                send_message(f'{metric.name}: {metric.result().numpy()}')
             print('Done Validation.')
 
         print('Finished training')
 
     @tf.function()
-    def __validation_step(self, model, inputs: tf.Tensor, labels: tf.Tensor) -> None:
+    def __validation_step(self, model, inputs: tf.Tensor, labels: tf.Tensor, **kwargs) -> None:
         """
         Single model validaiton step.
         after predicting on a single batch, we update the training metrics for the model.
@@ -102,12 +108,12 @@ class Trainer():
             drug_b_batch: A tensorflow's Tensor shape: [batch_size, 1] containing drug ids.
             labels: A tensorflow's Tensor shape: [batch_size] containing binary labels.
         """
-        predictions = model(inputs, training=False)
+        predictions = model(inputs, training=False, **kwargs)
         for metric in self.val_metrics:
             metric.update_state(y_true=labels, y_pred=predictions)
     
     @tf.function()
-    def __train_step(self, model, inputs: tf.Tensor, labels: tf.Tensor) -> None:
+    def __train_step(self, model, inputs: tf.Tensor, labels: tf.Tensor, **kwargs) -> None:
         """
         Single model train step.
         after predicting on a single batch, we update the training metrics for the model.
@@ -118,7 +124,7 @@ class Trainer():
             labels: A tensorflow's Tensor shape: [batch_size] containing binary labels.
         """
         with tf.GradientTape() as tape:
-            predictions = model(inputs, training=True)
+            predictions = model(inputs, training=True, **kwargs)
             loss = self.loss_fn(y_true=labels, y_pred=predictions)        
         gradients = tape.gradient(loss, model.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, model.trainable_variables))
@@ -127,7 +133,7 @@ class Trainer():
             metric.update_state(y_true=labels, y_pred=predictions)
 
 
-    def predict(self, model, test_dataset, batch_size: int=1024, buffer_size: int=1*10**6, mean_vector: bool=False):
+    def predict(self, model, test_dataset, batch_size: int=1024, buffer_size: int=1*10**5, **kwargs):
         """
         Predicting on new Drugs and comparing to the values in the test matrix.
         
@@ -145,8 +151,9 @@ class Trainer():
 
         predictions, labels = [], []
         print('Predicting on the test dataset.')
+        send_message('Predicting on the test dataset.')
         for _, (inputs, labels_batch) in tqdm(enumerate(test_dataset)):
-            preds = self.__test_step(model, inputs, labels_batch, test_metrics, mean_vector)
+            preds = self.__test_step(model, inputs, labels_batch, test_metrics, **kwargs)
 
             predictions += [x[0] for x in preds.numpy().tolist()]
             labels += labels_batch.numpy().tolist()
@@ -156,12 +163,14 @@ class Trainer():
         print('Done predicting.')
         for metric in test_metrics:
             print(f'{metric.name}: {metric.result().numpy()}', end=' ')
+            send_message(f'{metric.name}: {metric.result().numpy()}')
         
         print(tf.math.confusion_matrix(labels, binary_predictions))
+        send_message(f'{tf.math.confusion_matrix(labels, binary_predictions)}')
 
     @tf.function()
     def __test_step(self, model, inputs: tf.Tensor,
-                        labels: tf.Tensor, metrics: List[tf.keras.metrics.Metric], mean_vector: bool=False) -> None:
+                        labels: tf.Tensor, metrics: List[tf.keras.metrics.Metric], **kwargs) -> None:
         """
         Single model test step.
         after predicting on a single batch, we update the training metrics for the model.
@@ -172,7 +181,7 @@ class Trainer():
             labels: A tensorflow's Tensor shape: [batch_size] containing binary labels.
             mean_vector: A boolean indicates if to use the untrained new drug embedding or take the average of existing drugs.
         """
-        predictions = model(inputs, training=False)
+        predictions = model(inputs, training=False, **kwargs)
         for metric in metrics:
             metric.update_state(y_true=labels, y_pred=predictions)
         

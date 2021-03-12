@@ -96,14 +96,14 @@ class DeepSmilesDrugDataset(DrugDataset):
             except:
                 test_labels += [1] if self.new_drug_bank.id_to_drug[drug_a].interacts_with(self.old_drug_bank.id_to_drug[drug_b]) else [0]
         
-        return (train_drug_pairs, train_labels), (test_drug_pairs, test_labels), {}
+        return (train_drug_pairs, train_labels), (test_drug_pairs, test_labels), {'atom_info': self.atom_info, 'struct_info': self.struct_info}
 
     def build_dataset(self, validation_size: float=0.2):
         
         self.old_drug_bank = self.get_smiles_drugs(self.old_drug_bank)
         self.new_drug_bank = self.get_smiles_drugs(self.new_drug_bank)
 
-        train_data, test_data, _, metadata = self.create_data()
+        train_data, test_data, metadata = self.create_data()
 
         positive_instances, positive_labels = self.get_positive_instances(train_data)
         negative_instances, negative_labels = self.get_negative_instances(train_data)
@@ -187,9 +187,11 @@ class DeepSmilesDrugDataset(DrugDataset):
         """
         valid_drug_ids = []
         for drug in drug_bank.drugs:
-            if drug.smiles is not None and len(drug.smiles) <= self.atom_size:
-                valid_drug_ids.append(drug.id_)
-
+            try:
+                if drug.smiles and len(Chem.MolToSmiles(Chem.MolFromSmiles(drug.smiles), kekuleSmiles=True, isomericSmiles=True)) < self.atom_size: # pylint: disable=maybe-no-member
+                    valid_drug_ids.append(drug.id_)
+            except:
+                pass
         drugs_with_smiles = [drug for drug in drug_bank.drugs if drug.id_ in valid_drug_ids]
         for drug in tqdm(drugs_with_smiles, desc='filtering interactions'):
             new_interactions = [(drug_id, interaction) for drug_id, interaction in drug.interactions if drug_id in valid_drug_ids]
@@ -366,8 +368,8 @@ class DeepSmilesDrugDataset(DrugDataset):
         cnn_features = {}
         lensize = self.atom_info + self.struct_info
         
-        for drug_id, smile in {**drug_to_smiles, **test_drug_to_smiles}.items():
+        for drug_id, smile in tqdm({**drug_to_smiles, **test_drug_to_smiles}.items(), desc='cnn features'):
             mol = Chem.MolFromSmiles(smile) # pylint: disable=maybe-no-member
-            cnn_features[drug_id] = np.array(self.mol_to_feature(mol, -1)).reshape(self.atom_size, lensize)
+            cnn_features[drug_id] = np.array(self.mol_to_feature(mol, -1)).reshape(self.atom_size, lensize, 1) # pylint: disable=too-many-function-args
 
         return cnn_features

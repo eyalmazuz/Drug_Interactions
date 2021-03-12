@@ -33,25 +33,15 @@ def main():
 
     trainer = Trainer()
 
-    trainer.train(model, train_dataset, validation_dataset, epochs=3, batch_size=1024, buffer_size=100000)
+    trainer.train(model, train_dataset, validation_dataset, epochs=3, batch_size=1024, buffer_size=50000)
 
-    trainer.predict(model, test_dataset, mean_vector=True)
+    trainer.predict(model, test_dataset, buffer_size=50000)
 
 if __name__ == "__main__":
     main()
 
-# slimes size < 50
-# len(y)=500670 (train + validation)
-# len(y_test)=356983
-# validation_size=100134
-# Test BCE: 0.6942437887191772 Test Accuracy: 0.0 Test AUC: 0.7054968476295471 tf.Tensor(
-# [[139723 150651]
-#  [ 11752  54857]], shape=(2, 2), dtype=int32)
-
-# smiles size < 40
-# len(y)=208284 (train + validation)
-# len(y_test)=151713
-# validation_size=41656
-# Test BCE: 0.6033194065093994 Test Accuracy: 0.0 Test AUC: 0.7056666016578674 tf.Tensor(
-# [[80308 44936]
-#  [ 8376 18093]], shape=(2, 2), dtype=int32)
+# GRU only
+# Done predicting.
+# Test BCE: 0.6129963994026184 Test AUC: 0.6951707601547241 tf.Tensor(
+# [[890197 568557]
+#  [ 61703 128638]], shape=(2, 2), dtype=int32)

@@ -5,8 +5,8 @@ from tensorflow.keras.layers import Embedding, Add, Dropout, Multiply, Conv2D, B
 
 class CharSmilesConfig():
 
-    def __init__(self, gru_layers: int=2, gru_units: int=32, gru_dropout_rate: float=0.3,
-                    dropout_rate: float=0.3, num_classes: int=1, **kwargs):
+    def __init__(self, gru_layers: int=2, gru_units: int=32, gru_dropout_rate: float=0.2,
+                    dropout_rate: float=0.2, num_classes: int=1, **kwargs):
         
         super().__init__()
         self.gru_layers = gru_layers
@@ -14,10 +14,11 @@ class CharSmilesConfig():
         self.gru_dropout_rate = gru_dropout_rate
         self.dropout_rate = dropout_rate
         self.num_classes = num_classes
+        self.kwargs = kwargs
 
 class CharSmiles(tf.keras.Model):
 
-    def __init__(self, config: CharSmilesConfig, **kwargs):
+    def __init__(self, config: CharSmilesConfig):
         super(CharSmiles, self).__init__()
 
         self.grus = []
@@ -50,6 +51,7 @@ class CharSmiles(tf.keras.Model):
 
         return logits
 
+    @tf.function()
     def gru_forward(self, drug_smiles, training):
 
         for gru in self.grus:

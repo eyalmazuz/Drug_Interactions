@@ -6,37 +6,39 @@ from tensorflow.keras.layers import Embedding, Add, Dropout, Multiply, Conv2D, B
 class DeepSmilesConfig():
 
     def __init__(self, gru_layers: int=2, gru_units: int=32, gru_dropout_rate: float=0.3,
-                    dropout_rate: float=0.3, num_classes: int=1, **kwargs):
+                    dropout_rate: float=0.3, filters: int=32, num_classes: int=1, **kwargs):
         
         super().__init__()
         self.gru_layers = gru_layers
         self.gru_units = gru_units
         self.gru_dropout_rate = gru_dropout_rate
+        self.filters = filters
         self.dropout_rate = dropout_rate
         self.num_classes = num_classes
+        self.kwargs = kwargs
 
 
 class DeepSmiles(tf.keras.Model):
 
-    def __init__(self, metadata):
+    def __init__(self, config):
         super(DeepSmiles, self).__init__()
 
-        self.atomsize = metadata['atomsize']
+        self.atom_info = config.kwargs['atom_info']
 
-        self.len_info = metadata['len_info']
+        self.struct_info = config.kwargs['struct_info']
 
         # GRU Part
         self.grus = []
-        for i in range(metadata['gru_layers']):
-            self.grus.append(Bidirectional(GRU(units=metadata['gru_units'],
-                                            dropout=metadata['gru_dropout_rate'],
-                                            return_sequences=i != metadata['gru_layers'] - 1),
+        for i in range(config.gru_layers):
+            self.grus.append(Bidirectional(GRU(units=config.gru_units,
+                                            dropout=config.gru_dropout_rate,
+                                            return_sequences=i != config.gru_layers - 1),
                                             merge_mode='ave'))
 
         # CNN part
-        self.conv1 = Conv2D(filters=32, kernel_size=(3, 42), strides=1, padding=(1, 0))
+        self.conv1 = Conv2D(filters=config.filters, kernel_size=(3, self.atom_info + self.struct_info), strides=1)
         self.bn1 = BatchNormalization()
-        self.conv2 = self.conv1 = Conv2D(filters=32, kernel_size=(3, 1), strides=1, padding=(1, 0))
+        self.conv2 = Conv2D(filters=config.filters, kernel_size=(3, 1), strides=1)
         self.bn2 = BatchNormalization()
         self.bn3 = BatchNormalization()
         self.fcnn3 = Dense(units=64)
@@ -44,10 +46,10 @@ class DeepSmiles(tf.keras.Model):
         
         # FFN part
         self.fc1 = Dense(units=64, activation='relu')
-        self.dropout = Dropout(rate=metadata['dropout_rate'])
+        self.dropout = Dropout(rate=config.dropout_rate)
 
 
-        self.fc2 = Dense(units=metadata['num_classes'], activation='sigmoid')
+        self.fc2 = Dense(units=config.num_classes, activation='sigmoid')
 
     def call(self, inputs, training, **kwargs):
 
@@ -75,6 +77,7 @@ class DeepSmiles(tf.keras.Model):
 
         return logits
 
+    @tf.function
     def gru_forward(self, drug_smiles, training):
 
         for gru in self.grus:
@@ -82,20 +85,24 @@ class DeepSmiles(tf.keras.Model):
 
         return drug_smiles
 
+    @tf.function
     def cnn_forward(self, drug_cnn, training):
         
+        drug_cnn = tf.pad(drug_cnn, [[0, 0],[1, 1], [0, 0], [0, 0]], "CONSTANT")
         drug_cnn = tf.nn.leaky_relu(self.bn1(self.conv1(drug_cnn), training=training))
-        drug_cnn = tf.nn.avg_pool2d(drug_cnn, ksize=(5, 1), strides=1, padding=(2, 0))
+        drug_cnn = tf.pad(drug_cnn, [[0, 0],[1, 1], [0, 0], [0, 0]], "CONSTANT")
+        drug_cnn = tf.nn.avg_pool2d(drug_cnn, ksize=(5, 1), strides=1, padding='SAME')
+        drug_cnn = tf.pad(drug_cnn, [[0, 0],[1, 1], [0, 0], [0, 0]], "CONSTANT")
         drug_cnn = tf.nn.leaky_relu(self.bn2(self.conv2(drug_cnn), training=training))
-        drug_cnn = tf.nn.avg_pool2d(drug_cnn, ksize=(5, 1), strides=1, padding=(2, 0))
+        drug_cnn = tf.pad(drug_cnn, [[0, 0],[2, 2], [0, 0], [0, 0]], "CONSTANT")
+        drug_cnn = tf.nn.avg_pool2d(drug_cnn, ksize=(5, 1), strides=1, padding='SAME')
         drug_cnn = GlobalMaxPool2D()(self.dropout(drug_cnn, training=training))
-        drug_cnn = tf.squeeze(drug_cnn, -1)
-        drug_cnn = tf.squeeze(drug_cnn, -1)
         drug_cnn = tf.nn.leaky_relu(self.bn3(self.fcnn3(drug_cnn), training=training))
         drug_cnn = self.dropout(drug_cnn, training=training)
 
         return drug_cnn
 
+    @tf.function
     def ffn(self, drug_concat, training=False):
 
         dense = self.fc1(drug_concat)
