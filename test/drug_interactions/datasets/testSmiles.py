@@ -4,9 +4,9 @@ import numpy as np
 
 from drug_interactions.reader.dal import Drug, DrugBank
 from drug_interactions.training.train import Trainer
-from drug_interactions.datasets.dataset_builder import SmilesDrugDataset
+from drug_interactions.datasets.OneHotSmilesDataset import OneHotSmilesDrugDataset
 
-class ColdStartDrugDatasetTestCase(TestCase):
+class OneHotSmilesDrugDatasetTestCase(TestCase):
 
     def setUp(self):
 
@@ -26,7 +26,7 @@ class ColdStartDrugDatasetTestCase(TestCase):
 
         self.NewDrugBank = DrugBank('12', [self.Newdrug1, self.Newdrug2, self.Newdrug3, self.Newdrug4, self.Newdrug5, self.Newdrug6])
 
-        self.dataset = SmilesDrugDataset(self.oldDrugBank, self.NewDrugBank, neg_pos_ratio=1.0, atom_size=300, atom_info=21, struct_info=21)
+        self.dataset = OneHotSmilesDrugDataset(self.oldDrugBank, self.NewDrugBank, neg_pos_ratio=1.0, atom_size=300, atom_info=21, struct_info=21)
 
 
     def testGetSmilesDrugsOld(self):
@@ -54,28 +54,17 @@ class ColdStartDrugDatasetTestCase(TestCase):
     def testGetSmilesFeature(self):
         drug_to_smiles = {'1': "CC(=O)", '2': "CC(=H)"}
 
-        drug_to_smiles_features_gt = {'1': np.array([[1, 0, 0, 0, 0, 0 ,0, 0],
-                                                     [0, 0, 0, 0, 1, 0 ,0, 0],
-                                                     [0, 0, 0, 0, 1, 0 ,0, 0],
-                                                     [0, 1, 0, 0, 0, 0 ,0, 0],
-                                                     [0, 0, 0, 1, 0, 0 ,0, 0],
-                                                     [0, 0, 0, 0, 0, 0 ,1, 0],
-                                                     [0, 0, 1, 0, 0, 0 ,0, 0],
-                                                     [0, 0, 0, 0, 0, 0 ,0, 1]]),
-                                      '2': np.array([[1, 0, 0, 0, 0, 0 ,0, 0],
-                                                     [0, 0, 0, 0, 1, 0 ,0, 0],
-                                                     [0, 0, 0, 0, 1, 0 ,0, 0],
-                                                     [0, 1, 0, 0, 0, 0 ,0, 0],
-                                                     [0, 0, 0, 1, 0, 0 ,0, 0],
-                                                     [0, 0, 0, 0, 0, 1 ,0, 0],
-                                                     [0, 0, 1, 0, 0, 0 ,0, 0],
-                                                     [0, 0, 0, 0, 0, 0 ,0, 1]])}
+        drug_to_smiles_features_gt = {'1': np.array([[1, 0, 0, 0, 0, 0 ,0],
+                                                     [0, 0, 0, 1, 0, 0 ,0],
+                                                     [0, 1, 0, 0, 0, 0 ,0],
+                                                     [0, 0, 0, 0, 0, 0 ,1],
+                                                     [0, 0, 0, 0, 1, 0 ,0]]),
+                                      '2': np.array([[1, 0, 0, 0, 0, 0 ,0],
+                                                     [0, 0, 0, 1, 0, 0 ,0],
+                                                     [0, 1, 0, 0, 0, 0 ,0],
+                                                     [0, 0, 0, 0, 0, 1 ,0],
+                                                     [0, 0, 0, 0, 1, 0 ,0]])}
 
-        drug_to_smiles_features = self.dataset.get_smiles_features(drug_to_smiles)
-        # print(drug_to_smiles_features)
+        drug_to_smiles_features = self.dataset.get_smiles_features(drug_to_smiles, {'2': "CC(=H)"})
+        print(drug_to_smiles_features)
         self.assertCountEqual(drug_to_smiles_features, drug_to_smiles_features_gt)
-
-
-    def testCreateData(self):
-        res = self.dataset.create_data()
-

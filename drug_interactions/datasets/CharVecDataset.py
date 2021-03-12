@@ -14,7 +14,7 @@ from drug_interactions.datasets.DatasetUtils import Data
 from drug_interactions.datasets.AbstractDataset import DrugDataset
 
 
-class IntersectionDrugDataset(DrugDataset):
+class CharVecDataset(DrugDataset):
     
     def __init__(self, old_drug_bank: DrugBank, new_drug_bank: DrugBank, neg_pos_ratio: float=1.0, **kwargs):
         super().__init__(old_drug_bank, new_drug_bank, neg_pos_ratio)

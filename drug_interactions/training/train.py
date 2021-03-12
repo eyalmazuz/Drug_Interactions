@@ -49,7 +49,7 @@ class Trainer():
         self.val_metrics = [tf.keras.metrics.BinaryCrossentropy(name='Validation BCE'),
                         tf.keras.metrics.AUC(name='Validation AUC')]
 
-    def train(self, model, train_dataset, validation_dataset, epochs: int=5, batch_size: int=1024, validation_size: int=1000, buffer_size=1000000):
+    def train(self, model, train_dataset, validation_dataset, epochs: int=5, batch_size: int=1024, buffer_size=1000):
         """
         Trains the model.
         
@@ -58,10 +58,8 @@ class Trainer():
                 if None, then there's no sampling.
             epochs: Number of epochs to train the model.
             batch_size: Size of each batch for the model.
-            validation_size: How much from all the data to take for the validation set.
         """
         print('Start Model Training')
-        print(f'{validation_size=}')
         train_dataset = train_dataset.shuffle(buffer_size).batch(batch_size)
         validation_dataset = validation_dataset.shuffle(buffer_size).batch(batch_size)
 
@@ -174,7 +172,7 @@ class Trainer():
             labels: A tensorflow's Tensor shape: [batch_size] containing binary labels.
             mean_vector: A boolean indicates if to use the untrained new drug embedding or take the average of existing drugs.
         """
-        predictions = model(inputs, training=False, mean_vector=mean_vector)
+        predictions = model(inputs, training=False)
         for metric in metrics:
             metric.update_state(y_true=labels, y_pred=predictions)
         

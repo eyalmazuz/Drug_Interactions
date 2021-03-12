@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from drug_interactions.reader.dal import DrugBank
 from drug_interactions.datasets.DatasetUtils import Data
-from drug_interactions.datasets.dataset_builder import DrugDataset
+from drug_interactions.datasets.AbstractDataset import DrugDataset
 
 class ColdStartDrugDataset(DrugDataset):
     

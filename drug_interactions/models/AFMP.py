@@ -5,33 +5,47 @@ import tensorflow as tf
 from tensorflow.keras.layers import Embedding, Add, Dropout, Multiply, Conv2D, BatchNormalization, AveragePooling2D, \
                                 Concatenate, Flatten, Dense, InputLayer, GRU, Bidirectional, GlobalMaxPool2D
 
+class AFMPConfig():
+
+    def __init__(self, num_drugs: int=4321, embedding_size: int=256, dropout_rate: float=0.3,
+                    propegation_factor: float=0.4, num_classes: int=1, use_mean_vector: bool=False, **kwargs):
+        
+        super().__init__()
+        self.num_drugs = num_drugs
+        self.embedding_size = embedding_size
+        self.dropout_rate = dropout_rate
+        self.propegation_factor = propegation_factor
+        self.num_classes = num_classes
+        self.use_mean_vector = use_mean_vector
 
 class AFMP(tf.keras.Model):
 
-    def __init__(self, metadata: Dict[str, Any]):
+    def __init__(self, config: AFMPConfig, **kwargs):
         super(AFMP, self).__init__()
 
-        self.drug_embedding = Embedding(input_dim=metadata['num_drugs']+1, output_dim=metadata['embedding_size'], name='Embedding')
-        self.bias_embedding = Embedding(input_dim=metadata['num_drugs']+1, output_dim=1, name='Bias')
+        self.drug_embedding = Embedding(input_dim=config.num_drugs+1, output_dim=config.embedding_size, name='Embedding')
+        self.bias_embedding = Embedding(input_dim=config.num_drugs+1, output_dim=1, name='Bias')
 
-        self.dropout = Dropout(metadata['dropout_rate'], name='Dropout')
-        self.dense = Dense(units=metadata['num_classes'], activation='sigmoid')
+        self.dropout = Dropout(config.dropout_rate, name='Dropout')
+        self.dense = Dense(units=config.num_classes, activation='sigmoid')
 
-        self.drug_graph = metadata['drug_graph']
-        self.propegation_factor = metadata['propegation_factor']
+        self.drug_graph = kwargs['drug_graph']
+        self.propegation_factor = config.propegation_factor
+        self.use_mean_vector = config.use_mean_vector
 
 
-    def call(self, inputs, training=False, **kwargs):
+    def call(self, inputs, training=False):
         
         drug_a, drug_b = inputs
 
-        if 'mean_vector' in kwargs and kwargs['mean_vector']:
+        if self.use_mean_vector:
             print('using mean vector')
             drug_a_emb = self.drug_embedding(np.array(list(self.drug_graph.keys())), training=True)
             drug_a_emb = tf.math.reduce_mean(drug_a_emb, axis=0)
             drug_a_emb = tf.repeat([drug_a_emb], drug_b.shape[0], axis=0)
         else:
             drug_a_emb = self.drug_embedding(drug_a, training=True)
+
         drug_a_emb = self.dropout(drug_a_emb, training=training)
 
         drug_b_emb = self.drug_embedding(drug_b, training=True)
@@ -61,7 +75,6 @@ class AFMP(tf.keras.Model):
                 drug_weights = weights[drug_idx, :]
                 neighbors_weights = weights[neighbors, :]
 
-                # total_weights += (1 / len(neighbors)) * neighbors
                 neighbors_weights = ((1 / len(neighbors)) * neighbors_weights).mean(axis=0)
 
                 drug_weights = drug_weights * (1 - self.propegation_factor) + self.propegation_factor * neighbors_weights
@@ -76,4 +89,4 @@ class AFMP(tf.keras.Model):
 
         old_drug_embs = weights[old_drug_ids, :]
 
-        return old_drug_embs.mean(axis=0)   
+        return old_drug_embs.mean(axis=0)

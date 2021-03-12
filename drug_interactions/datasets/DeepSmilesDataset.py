@@ -1,4 +1,3 @@
-from functools import partial
 from itertools import product
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
@@ -7,10 +6,10 @@ from typing import List, Dict, Tuple, Optional, Any
 import random
 
 import numpy as np
-# from rdkit import Chem
-# from rdkit.Chem import rdchem
-# from rdkit import RDLogger
-# RDLogger.DisableLog('rdApp.info')
+from rdkit import Chem
+from rdkit.Chem import rdchem
+from rdkit import RDLogger
+RDLogger.DisableLog('rdApp.info')
 import tensorflow as tf
 from tqdm import tqdm
 
@@ -19,13 +18,13 @@ from drug_interactions.datasets.DatasetUtils import Data
 from drug_interactions.datasets.AbstractDataset import DrugDataset
 
 
-class OneHotSmilesDrugDataset(DrugDataset):
+class DeepSmilesDrugDataset(DrugDataset):
     
     def __init__(self, old_drug_bank: DrugBank, new_drug_bank: DrugBank, neg_pos_ratio: float=1.0, **kwargs):
         super().__init__(old_drug_bank, new_drug_bank, neg_pos_ratio)
         self.atom_size = kwargs['atom_size']
-        # self.atom_info = kwargs['atom_info']
-        # self.struct_info = kwargs['struct_info']
+        self.atom_info = kwargs['atom_info']
+        self.struct_info = kwargs['struct_info']
 
     def get_positive_instances(self, data, new_drug_idxs=None):
 
@@ -83,11 +82,12 @@ class OneHotSmilesDrugDataset(DrugDataset):
 
 
         drug_to_smiles_features = self.get_smiles_features(drug_to_smiles, test_drug_to_smiles)
-
-        train_labels = [1 if self.old_drug_bank.id_to_drug[drug_a].interacts_with(self.old_drug_bank.id_to_drug[drug_b]) else 0 for drug_a, drug_b in tqdm(train_drug_pairs, desc='building train pairs')]
+        cnn_features = self.get_cnn_features(drug_to_smiles, test_drug_to_smiles)
 
         self.drug_to_smiles_features = drug_to_smiles_features
+        self.cnn_features = cnn_features
 
+        train_labels = [1 if self.old_drug_bank.id_to_drug[drug_a].interacts_with(self.old_drug_bank.id_to_drug[drug_b]) else 0 for drug_a, drug_b in tqdm(train_drug_pairs, desc='building train pairs')]
 
         test_labels = []
         for drug_a, drug_b in tqdm(test_drug_pairs, desc='building test pairs'):
@@ -103,7 +103,7 @@ class OneHotSmilesDrugDataset(DrugDataset):
         self.old_drug_bank = self.get_smiles_drugs(self.old_drug_bank)
         self.new_drug_bank = self.get_smiles_drugs(self.new_drug_bank)
 
-        train_data, test_data, metadata = self.create_data()
+        train_data, test_data, _, metadata = self.create_data()
 
         positive_instances, positive_labels = self.get_positive_instances(train_data)
         negative_instances, negative_labels = self.get_negative_instances(train_data)
@@ -144,29 +144,35 @@ class OneHotSmilesDrugDataset(DrugDataset):
         x_test, y_test = zip(*test)
 
         print('Generating dataset objects')
-
-
+ 
         train_dataset = tf.data.Dataset.from_generator(self.data_generator,
                                                         args=[x_train, y_train],
-                                                        output_types=((np.float32, np.float32), np.float32))
+                                                        output_types=(((np.float32, np.float32),
+                                                                        (np.float32, np.float32)),
+                                                                        np.float32))
         print('finished building train dataset')
 
         validation_dataset = tf.data.Dataset.from_generator(self.data_generator,
                                                         args=[x_val, y_val],
-                                                        output_types=((np.float32, np.float32), np.float32))
+                                                        output_types=(((np.float32, np.float32),
+                                                                        (np.float32, np.float32)),
+                                                                        np.float32))
         print('finished building validation dataset')
 
         test_dataset = tf.data.Dataset.from_generator(self.data_generator,
                                                         args=[x_test, y_test],
-                                                        output_types=((np.float32, np.float32), np.float32))
+                                                        output_types=(((np.float32, np.float32),
+                                                                        (np.float32, np.float32)),
+                                                                        np.float32))
         print('finished building test dataset')
 
         return train_dataset, validation_dataset, test_dataset, metadata
-    
+
     def data_generator(self, x, y):
         for (a, b), label in zip(x, y):
-            f_a, f_b = self.drug_to_smiles_features[a.decode()], self.drug_to_smiles_features[b.decode()] 
-            yield (f_a, f_b), label
+            f_a, f_b = self.drug_to_smiles_features[a.decode()], self.drug_to_smiles_features[b.decode()]
+            c_a, c_b = self.cnn_features[a.decode()], self.cnn_features[b.decode()]
+            yield ((c_a, f_a), (c_b, f_b)), label
 
     def get_smiles_drugs(self, drug_bank: DrugBank):
         """
@@ -220,3 +226,148 @@ class OneHotSmilesDrugDataset(DrugDataset):
             drug_to_smiles_features[drug_id] = one_hot
 
         return drug_to_smiles_features
+
+    def islower(self, s):
+        lowerReg = re.compile(r'^[a-z]+$')
+        return lowerReg.match(s) is not None
+
+    def isupper(self, s):
+        upperReg = re.compile(r'^[A-Z]+$')
+        return upperReg.match(s) is not None
+
+    def calc_atom_feature(self, atom):
+        
+        Chiral = {"CHI_UNSPECIFIED":0,  "CHI_TETRAHEDRAL_CW":1, "CHI_TETRAHEDRAL_CCW":2, "CHI_OTHER":3}
+        Hybridization = {"UNSPECIFIED":0, "S":1, "SP":2, "SP2":3, "SP3":4, "SP3D":5, "SP3D2":6, "OTHER":7}
+        
+        if atom.GetSymbol() == 'H':   feature = [1,0,0,0,0]
+        elif atom.GetSymbol() == 'C': feature = [0,1,0,0,0]
+        elif atom.GetSymbol() == 'O': feature = [0,0,1,0,0]
+        elif atom.GetSymbol() == 'N': feature = [0,0,0,1,0]
+        else: feature = [0,0,0,0,1]
+            
+        feature.append(atom.GetTotalNumHs()/8)
+        feature.append(atom.GetTotalDegree()/4)
+        feature.append(atom.GetFormalCharge()/8)
+        feature.append(atom.GetTotalValence()/8)
+        feature.append(atom.IsInRing()*1)
+        feature.append(atom.GetIsAromatic()*1)
+
+        f =  [0]*(len(Chiral)-1)
+        if Chiral.get(str(atom.GetChiralTag()), 0) != 0:
+            f[Chiral.get(str(atom.GetChiralTag()), 0)] = 1
+        feature.extend(f)
+
+        f =  [0]*(len(Hybridization)-1)
+        if Hybridization.get(str(atom.GetHybridization()), 0) != 0:
+            f[Hybridization.get(str(atom.GetHybridization()), 0)] = 1
+        feature.extend(f)
+        
+        return(feature)
+
+
+    def calc_structure_feature(self, c, flag, label, struct_info):
+        feature = [0] * struct_info
+
+        if c== '(' :
+            feature[0] = 1
+            flag = 0
+        elif c== ')' :
+            feature[1] = 1
+            flag = 0
+        elif c== '[' :
+            feature[2] = 1
+            flag = 0
+        elif c== ']' :
+            feature[3] = 1
+            flag = 0
+        elif c== '.' :
+            feature[4] = 1
+            flag = 0
+        elif c== ':' :
+            feature[5] = 1
+            flag = 0
+        elif c== '=' :
+            feature[6] = 1
+            flag = 0
+        elif c== '#' :
+            feature[7] = 1
+            flag = 0
+        elif c== '\\':
+            feature[8] = 1
+            flag = 0
+        elif c== '/' :
+            feature[9] = 1
+            flag = 0  
+        elif c== '@' :
+            feature[10] = 1
+            flag = 0
+        elif c== '+' :
+            feature[11] = 1
+            flag = 1
+        elif c== '-' :
+            feature[12] = 1
+            flag = 1
+        elif c.isdigit() == True:
+            if flag == 0:
+                if c in label:
+                    feature[20] = 1
+                else:
+                    label.append(c)
+                    feature[19] = 1
+            else:
+                feature[int(c)-1+12] = 1
+                flag = 0
+        return(feature,flag,label)
+
+
+    def calc_featurevector(self, mol, smiles):
+        flag = 0
+        label = []
+        molfeature = []
+        idx = 0
+        j = 0
+        H_Vector = [0] * self.atom_info
+        H_Vector[0] = 1
+        lensize = self.atom_info + self.struct_info
+
+                
+        for c in smiles:
+            if self.islower(c) == True: continue
+            elif self.isupper(c) == True:
+                if c == 'H':
+                    molfeature.extend(H_Vector)
+                else:
+                    molfeature.extend(self.calc_atom_feature(rdchem.Mol.GetAtomWithIdx(mol, idx)))
+                    idx = idx + 1
+                molfeature.extend([0]*self.struct_info)
+                j = j +1
+                
+            else:   
+                molfeature.extend([0] * self.atom_info)
+                f, flag, label = self.calc_structure_feature(c, flag, label, self.struct_info)
+                molfeature.extend(f)
+                j = j +1
+
+        #0-Padding
+        molfeature.extend([0]*(self.atom_size-j)*lensize)        
+        return(molfeature)
+
+
+    def mol_to_feature(self, mol, n):
+        try: defaultSMILES = Chem.MolToSmiles(mol, kekuleSmiles=False, isomericSmiles=True, rootedAtAtom=int(n)) # pylint: disable=maybe-no-member
+        except: defaultSMILES = Chem.MolToSmiles(mol, kekuleSmiles=False, isomericSmiles=True) # pylint: disable=maybe-no-member
+        try: isomerSMILES = Chem.MolToSmiles(mol, kekuleSmiles=True, isomericSmiles=True, rootedAtAtom=int(n)) # pylint: disable=maybe-no-member
+        except: isomerSMILES = Chem.MolToSmiles(mol, kekuleSmiles=True, isomericSmiles=True) # pylint: disable=maybe-no-member
+        return self.calc_featurevector(Chem.MolFromSmiles(defaultSMILES), isomerSMILES) # pylint: disable=maybe-no-member
+
+
+    def get_cnn_features(self, drug_to_smiles, test_drug_to_smiles):
+        cnn_features = {}
+        lensize = self.atom_info + self.struct_info
+        
+        for drug_id, smile in {**drug_to_smiles, **test_drug_to_smiles}.items():
+            mol = Chem.MolFromSmiles(smile) # pylint: disable=maybe-no-member
+            cnn_features[drug_id] = np.array(self.mol_to_feature(mol, -1)).reshape(self.atom_size, lensize)
+
+        return cnn_features

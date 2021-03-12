@@ -10,3 +10,4 @@ class DatasetTypes(Enum):
     ONEHOT_SMILES = 2
     INTERSECTION = 3
     DEEP_SMILES = 4
+    CharVec = 5

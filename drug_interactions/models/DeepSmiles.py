@@ -3,6 +3,18 @@ import tensorflow as tf
 from tensorflow.keras.layers import Embedding, Add, Dropout, Multiply, Conv2D, BatchNormalization, AveragePooling2D, \
                                 Concatenate, Flatten, Dense, InputLayer, GRU, Bidirectional, GlobalMaxPool2D
 
+class DeepSmilesConfig():
+
+    def __init__(self, gru_layers: int=2, gru_units: int=32, gru_dropout_rate: float=0.3,
+                    dropout_rate: float=0.3, num_classes: int=1, **kwargs):
+        
+        super().__init__()
+        self.gru_layers = gru_layers
+        self.gru_units = gru_units
+        self.gru_dropout_rate = gru_dropout_rate
+        self.dropout_rate = dropout_rate
+        self.num_classes = num_classes
+
 
 class DeepSmiles(tf.keras.Model):
 
