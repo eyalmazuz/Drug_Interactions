@@ -1,0 +1,7 @@
+model type,test bce (logloss),test auc,Precision at 1,Precision at 20,Precision at 40,Precision at 60,Precision at 80,Precision at 100,Average Precision at 1,Average Precision at 2,Average Precision at 3,Average Precision at 4,Average Precision at 5
+afmp,0.3989,0.656,0.2035,0.1221,0.1054,0.0979,0.09579,0.0965,0.2337,0.2206,0.2376,0.25,0.2574
+afmp mean vector,0.3161,0.6614,0.0983,0.099,0.101,0.103,0.107,0.1107,0.2491,0.2485,0.24,0.2544,0.2612
+One-hot smiles,0.7361,0.6904,0.4061,0.3186,0.2915,0.2739,0.263,0.2536,0.3434,0.3226,0.3069,0.308,0.3045
+One-hot+cnn smiles,,,,,,,,,,,,,
+char2vec,0.7117,0.6868,0.3763,0.2887,0.2673,0.2531,0.2437,0.2364,0.1962,0.2066,0.2025,0.2028,0.2162
+shared mpn model,0.676,0.78,0.7,0.675,0.625,0.6,0.5988,0.587,0.3434,0.3538,0.3585,0.3665,0.3721

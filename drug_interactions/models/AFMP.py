@@ -1,13 +1,10 @@
-from typing import Dict, List, Any
-
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Embedding, Add, Dropout, Multiply, Conv2D, BatchNormalization, AveragePooling2D, \
-                                Concatenate, Flatten, Dense, InputLayer, GRU, Bidirectional, GlobalMaxPool2D
+from tensorflow.keras.layers import Embedding, Dropout, Dense
 
 class AFMPConfig():
 
-    def __init__(self, num_drugs: int=4321, embedding_size: int=256, dropout_rate: float=0.3,
+    def __init__(self, embedding_size: int=256, dropout_rate: float=0.3,
                     propegation_factor: float=0.4, num_classes: int=1, use_mean_vector: bool=False, **kwargs):
 
         super().__init__()

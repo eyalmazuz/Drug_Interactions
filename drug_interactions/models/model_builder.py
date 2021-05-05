@@ -1,19 +1,10 @@
-from abc import ABC, abstractmethod
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
-from typing import Dict, List, Any
-
-import numpy as np
-import tensorflow as tf
-from tensorflow.keras.layers import Embedding, Add, Dropout, Multiply, Conv2D, BatchNormalization, AveragePooling2D, \
-                                Concatenate, Flatten, Dense, InputLayer, GRU, Bidirectional, GlobalMaxPool2D
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 from drug_interactions.datasets.dataset_builder import DatasetTypes
 from drug_interactions.models.AFMP import AFMP, AFMPConfig
 from drug_interactions.models.CharSmiles import CharSmiles, CharSmilesConfig
 from drug_interactions.models.DeepSmiles import DeepSmiles, DeepSmilesConfig
-from drug_interactions.models.BinarySmiles import BinarySmiles, BinarySmilesConfig
-
 
 
 def get_config(model_type: DatasetTypes, **kwargs):
@@ -40,6 +31,3 @@ def get_model(model_type: DatasetTypes, **kwargs):
 
     elif model_type == DatasetTypes.DEEP_SMILES:
         return DeepSmiles(config)
-    
-    elif model_type == DatasetTypes.BINARY_SMILES:
-        return BinarySmiles(config)

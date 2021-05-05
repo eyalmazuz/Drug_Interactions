@@ -130,3 +130,9 @@ dmypy.json
 
 data/
 vsc.sh
+/CASTER/
+/jobs/
+/sbatch.example
+/job-*
+/models/
+/test.csv

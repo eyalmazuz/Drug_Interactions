@@ -1,7 +1,5 @@
-import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Embedding, Add, Dropout, Multiply, Conv2D, BatchNormalization, AveragePooling2D, \
-                                Concatenate, Flatten, Dense, InputLayer, GRU, Bidirectional, GlobalMaxPool2D
+from tensorflow.keras.layers import Dropout, Dense, GRU, Bidirectional
 
 class CharSmilesConfig():
 
@@ -40,7 +38,7 @@ class CharSmiles(tf.keras.Model):
         drug_b_out = self.gru_forward(drug_b_smiles, training=training)
 
         concat = tf.concat([drug_a_out, drug_b_out], -1)
-        
+ 
         dense = self.fc1(concat)
         dense = self.dropout(dense)
 
