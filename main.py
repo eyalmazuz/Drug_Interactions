@@ -1,47 +1,83 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
-from typing import List, Tuple, Dict
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import sys
 print(sys.path)
 import random 
-import numpy as np
 
+import numpy as np
+import tensorflow as tf
+
+from drug_interactions.features.get_features import get_features
 from drug_interactions.reader.reader import DrugReader
-from drug_interactions.reader.preprocessor import DrugPreprocessor
 from drug_interactions.datasets.dataset_builder import get_dataset, DatasetTypes
 from drug_interactions.training.train import Trainer
-from drug_interactions.models.model_builder import get_model, get_config
+from drug_interactions.training.evaluate import predict
+from drug_interactions.models.model_builder import get_model
+from drug_interactions.utils import send_message
+
+# tf.random.set_seed(0)
+# np.random.seed(0)
+# random.seed(0)
 
 def main():
     reader = DrugReader('./data/DrugBankReleases')
 
     old_drug_bank, new_drug_bank = reader.get_drug_data('5.1.3', '5.1.6')
 
-    print(len(old_drug_bank.drugs))
-    print(len(new_drug_bank.drugs))
+    print(f'Old drug bank num of drugs: {len(old_drug_bank.drugs)}')
+    print(f'New drug bank num of drugs: {len(new_drug_bank.drugs)}')
 
-    print(sum(map(len, [drug.interactions for drug in old_drug_bank.drugs])))
-    print(sum(map(len, [drug.interactions for drug in new_drug_bank.drugs])))
+    print(f'Num of old drug bank interactions: {sum(map(len, [drug.interactions for drug in old_drug_bank.drugs]))}')
+    print(f'Num of old drug bank interactions: {sum(map(len, [drug.interactions for drug in new_drug_bank.drugs]))}')
 
-    dataset_type = DatasetTypes.DEEP_SMILES
+    smiles_length = [len(drug.smiles) for drug in new_drug_bank.drugs if drug.smiles]
 
-    train_dataset, validation_dataset, test_dataset, metadata = get_dataset(dataset_type, old_drug_bank,
-                                                                            new_drug_bank, neg_pos_ratio=1.0, validation_size=0.2,
-                                                                            atom_size=300, atom_info=21, struct_info=21)
+    print(f'max drug smile length: {max(smiles_length)}')
+
+    types = {
+        '1': DatasetTypes.COLD_START,
+        '2': DatasetTypes.ONEHOT_SMILES,
+        '3': DatasetTypes.CHAR_2_VEC,
+        '4': DatasetTypes.DEEP_SMILES,
+    }
+    dataset_type = types[os.environ['SLURM_ARRAY_TASK_ID']]
+    dataset_type_str = str(dataset_type).split(".")[1]
+    feature_config = {
+        # CNN features
+        "atom_size": 300,
+        "atom_info": 21,
+        "struct_info": 21,
+        # Char2Vec feature
+        "embedding_size": 100,
+        "window": 5,
+        "min_count": 1,
+        "workers": 8,
+        "epochs": 5,
+    }
+
+    features = get_features(dataset_type, **feature_config)
+    send_message(f'Starting {str(dataset_type)}')
+    send_message(f'Starting {dataset_type_str}')
+    print(f'Starting {dataset_type_str}')
+
+    train_dataset, validation_dataset, test_dataset, metadata = get_dataset(old_drug_bank,
+                                                                            new_drug_bank,
+                                                                            feature_list=features,
+                                                                            sample=True,
+                                                                            epoch_sample=False,
+                                                                            neg_pos_ratio=1.0,
+                                                                            validation_size=0.2,
+                                                                            batch_size=1024,
+                                                                            atom_size=300,
+                                                                            test_path='./data/csvs/test.csv',)
 
     model = get_model(dataset_type, **metadata)
 
-    trainer = Trainer()
+    trainer = Trainer(epoch_sample=False)
 
-    trainer.train(model, train_dataset, validation_dataset, epochs=3, batch_size=1024, buffer_size=50000)
+    trainer.train(model, train_dataset, validation_dataset, epochs=3, dataset_type=dataset_type_str)
 
-    trainer.predict(model, test_dataset, buffer_size=50000)
+    predict(model, test_dataset, dataset_type=dataset_type_str)
 
 if __name__ == "__main__":
     main()
-
-# GRU only
-# Done predicting.
-# Test BCE: 0.6129963994026184 Test AUC: 0.6951707601547241 tf.Tensor(
-# [[890197 568557]
-#  [ 61703 128638]], shape=(2, 2), dtype=int32)

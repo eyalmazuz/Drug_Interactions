@@ -10,6 +10,7 @@ from rdkit import Chem
 from rdkit.Chem import rdchem
 from rdkit import RDLogger
 RDLogger.DisableLog('rdApp.info')
+from sklearn.model_selection import train_test_split
 import tensorflow as tf
 from tqdm import tqdm
 
@@ -19,37 +20,33 @@ from drug_interactions.datasets.AbstractDataset import DrugDataset
 
 
 class DeepSmilesDrugDataset(DrugDataset):
-    
+
     def __init__(self, old_drug_bank: DrugBank, new_drug_bank: DrugBank, neg_pos_ratio: float=1.0, **kwargs):
         super().__init__(old_drug_bank, new_drug_bank, neg_pos_ratio)
         self.atom_size = kwargs['atom_size']
         self.atom_info = kwargs['atom_info']
         self.struct_info = kwargs['struct_info']
+        self.validation_size = kwargs['validation_size']
 
-    def get_positive_instances(self, data, new_drug_idxs=None):
+    def split_positive_negative(self, data):
 
         data, labels = data
         print('getiing positive samples')
         idxs = np.where(np.array(labels) == 1)[0]
         pos_data = [data[i] for i in tqdm(idxs, 'positive')]
-        labels = [1] * len(pos_data)
+        pos_labels = [1] * len(pos_data)
 
-        return pos_data, labels
-
-    def get_negative_instances(self, data, new_drug_idxs=None):
-
-        data, labels = data
         print('getting negative samples')
         idxs = np.where(np.array(labels) == 0)[0]
         neg_data = [data[i] for i in tqdm(idxs, 'negative')]
-        labels = [0] * len(neg_data)
+        neg_labels = [0] * len(neg_data)
 
-        return neg_data, labels
+        return (pos_data, pos_labels), (neg_data, neg_labels)
 
     def sample_data(self, negative_instances: List[Tuple[int, int]], len_positive: int) -> Tuple[List[Tuple[int, int]], List[int]]:
         
-        print(f'{len(negative_instances)=}')
-        print(f'{len_positive=}')
+        print(f'Number of negative samples: {len(negative_instances)=}')
+        print(f'Number of positive samples: {len_positive=}')
         if len_positive < len(negative_instances) and self.neg_pos_ratio is not None:
             print('There are less positive cells so sampling from the negative cells')
             negative_indexes = random.sample(range(len(negative_instances)), k=int(self.neg_pos_ratio * len_positive))
@@ -62,15 +59,7 @@ class DeepSmilesDrugDataset(DrugDataset):
 
     def create_data(self):
         
-        train_drug_ids, test_drug_ids = set(self.old_drug_bank.id_to_drug.keys()), set(self.new_drug_bank.id_to_drug.keys())
-        new_drug_ids = test_drug_ids - (train_drug_ids & test_drug_ids)
-
-
-        train_drug_pairs = list(product(train_drug_ids, train_drug_ids))
-        train_drug_pairs = list(set([tuple(sorted(t)) for t in train_drug_pairs if t[0] != t[1]]))
-
-        test_drug_pairs = list(product(new_drug_ids, train_drug_ids))
-        test_drug_pairs += list(set([tuple(sorted(t)) for t in list(product(new_drug_ids, new_drug_ids)) if t[0] != t[1]]))
+        train_drug_ids, new_drug_ids = self.get_train_test_ids()
 
         drug_to_smiles = {}
         for drug_id in train_drug_ids:
@@ -80,52 +69,40 @@ class DeepSmilesDrugDataset(DrugDataset):
         for drug_id in new_drug_ids:
             test_drug_to_smiles[drug_id] = self.new_drug_bank.id_to_drug[drug_id].smiles
 
-
         drug_to_smiles_features = self.get_smiles_features(drug_to_smiles, test_drug_to_smiles)
-        cnn_features = self.get_cnn_features(drug_to_smiles, test_drug_to_smiles)
+        cnn_features = self.get_cnn_smiles_features(drug_to_smiles, test_drug_to_smiles)
 
         self.drug_to_smiles_features = drug_to_smiles_features
         self.cnn_features = cnn_features
 
-        train_labels = [1 if self.old_drug_bank.id_to_drug[drug_a].interacts_with(self.old_drug_bank.id_to_drug[drug_b]) else 0 for drug_a, drug_b in tqdm(train_drug_pairs, desc='building train pairs')]
-
-        test_labels = []
-        for drug_a, drug_b in tqdm(test_drug_pairs, desc='building test pairs'):
-            try:
-                test_labels += [1] if self.new_drug_bank.id_to_drug[drug_a].interacts_with(self.new_drug_bank.id_to_drug[drug_b]) else [0]
-            except:
-                test_labels += [1] if self.new_drug_bank.id_to_drug[drug_a].interacts_with(self.old_drug_bank.id_to_drug[drug_b]) else [0]
+    def build_dataset(self):
         
-        return (train_drug_pairs, train_labels), (test_drug_pairs, test_labels), {'atom_info': self.atom_info, 'struct_info': self.struct_info}
+        metadata = {}
+        metadata['atom_size'] = self.atom_size
+        metadata['atom_info'] = self.atom_info
+        metadata['struct_info'] = self.struct_info
 
-    def build_dataset(self, validation_size: float=0.2):
-        
         self.old_drug_bank = self.get_smiles_drugs(self.old_drug_bank)
         self.new_drug_bank = self.get_smiles_drugs(self.new_drug_bank)
 
-        train_data, test_data, metadata = self.create_data()
+        train_data, test_data = self.get_train_test_pairs()
+        print(f'{len(test_data[0])=}')
+        self.create_data()
 
-        positive_instances, positive_labels = self.get_positive_instances(train_data)
-        negative_instances, negative_labels = self.get_negative_instances(train_data)
+        (pos_instances, pos_labels), (neg_instances, neg_labels) = self.split_positive_negative(train_data)
 
-        negative_instances, negative_labels = self.sample_data(negative_instances, len(positive_instances))
+        neg_instances, neg_labels = self.sample_data(neg_instances, len(pos_instances))
 
-        x = positive_instances + negative_instances
-        y = positive_labels + negative_labels
+        x = pos_instances + neg_instances
+        y = pos_labels + neg_labels
         metadata['data_size'] =len(y)
-        print(f'{len(y)=}')
+        print(f'All data len: {len(y)=}')
 
         print('Creating validation set.')
-        if validation_size is not None:
-            validation_indexes = random.sample(range(len(x)), k=int(validation_size * len(x)))
-            train_indexes = list(set(range(len(x))) - set(validation_indexes))
 
-            x_val = [x[i] for i in validation_indexes]
-            y_val = [y[i] for i in validation_indexes]
-
-            x_train = [x[i] for i in train_indexes]
-            y_train = [y[i] for i in train_indexes]
-
+        if self.validation_size is not None:
+            x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=self.validation_size,
+                                                            random_state=42, shuffle=True, stratify=y)
         print('Creating test data')
         x_test, y_test = test_data
 
@@ -151,19 +128,21 @@ class DeepSmilesDrugDataset(DrugDataset):
                                                                         (np.float32, np.float32)),
                                                                         np.float32))
         print('finished building train dataset')
+        if self.validation_size is not None:
+            validation_dataset = tf.data.Dataset.from_generator(self.data_generator,
+                                                            args=[x_val, y_val],
+                                                            output_types=(((np.float32, np.float32),
+                                                                            (np.float32, np.float32)),
+                                                                            np.float32))
+            print('finished building validation dataset')
+        else: 
+            validation_dataset = None 
 
-        validation_dataset = tf.data.Dataset.from_generator(self.data_generator,
-                                                        args=[x_val, y_val],
-                                                        output_types=(((np.float32, np.float32),
-                                                                        (np.float32, np.float32)),
-                                                                        np.float32))
-        print('finished building validation dataset')
-
-        test_dataset = tf.data.Dataset.from_generator(self.data_generator,
+        test_dataset = tf.data.Dataset.from_generator(self.test_data_generator,
                                                         args=[x_test, y_test],
-                                                        output_types=(((np.float32, np.float32),
-                                                                        (np.float32, np.float32)),
-                                                                        np.float32))
+                                                        output_types=((tf.string, tf.string),
+                                                                    (((np.float32, np.float32), 
+                                                                    (np.float32, np.float32)), np.float32)))
         print('finished building test dataset')
 
         return train_dataset, validation_dataset, test_dataset, metadata
@@ -173,6 +152,12 @@ class DeepSmilesDrugDataset(DrugDataset):
             f_a, f_b = self.drug_to_smiles_features[a.decode()], self.drug_to_smiles_features[b.decode()]
             c_a, c_b = self.cnn_features[a.decode()], self.cnn_features[b.decode()]
             yield ((c_a, f_a), (c_b, f_b)), label
+
+    def test_data_generator(self, x, y):
+        for (a, b), label in zip(x, y):
+            f_a, f_b = self.drug_to_smiles_features[a.decode()], self.drug_to_smiles_features[b.decode()]
+            c_a, c_b = self.cnn_features[a.decode()], self.cnn_features[b.decode()]
+            yield ((a.decode(), b.decode()), (((c_a, f_a), (c_b, f_b)), label))
 
     def get_smiles_drugs(self, drug_bank: DrugBank):
         """
@@ -197,14 +182,13 @@ class DeepSmilesDrugDataset(DrugDataset):
             new_interactions = [(drug_id, interaction) for drug_id, interaction in drug.interactions if drug_id in valid_drug_ids]
             drug.interactions = set(new_interactions)
 
-        print(f'{len(drugs_with_smiles)=}')
+        print(f'Num of drugs only with smiles: {len(drugs_with_smiles)=}')
         drugs_with_smiles = [drug for drug in drugs_with_smiles if len(drug.interactions) > 0]
-        print(f'{len(drugs_with_smiles)=}')
+        print(f'Num of drugs only with smiles after filtering 0 interactions: {len(drugs_with_smiles)=}')
         new_bank = DrugBank(drug_bank.version, drugs_with_smiles)
         return new_bank
 
     def get_smiles_features(self, drug_to_smiles: Dict[str, str], test_drug_to_smiles: Dict[str, str]) -> Dict[str, np.array]:
-        # print(f'{drug_to_smiles=}')
         charset = sorted(set("".join(list(drug_to_smiles.values()))+"!E?"))
         embed = max([len(smile) for smile in {**drug_to_smiles, **test_drug_to_smiles}.values()]) + 2
         
@@ -364,7 +348,7 @@ class DeepSmilesDrugDataset(DrugDataset):
         return self.calc_featurevector(Chem.MolFromSmiles(defaultSMILES), isomerSMILES) # pylint: disable=maybe-no-member
 
 
-    def get_cnn_features(self, drug_to_smiles, test_drug_to_smiles):
+    def get_cnn_smiles_features(self, drug_to_smiles, test_drug_to_smiles):
         cnn_features = {}
         lensize = self.atom_info + self.struct_info
         

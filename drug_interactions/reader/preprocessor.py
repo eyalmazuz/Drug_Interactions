@@ -8,14 +8,12 @@ from drug_interactions.reader.dal import DrugBank, DrugDAL, Drug
 from tqdm import tqdm
 
 class DrugPreprocessor():
-
     """
     An object that contains all the preprocessing methods for the drug bank.
 
     Attributes:
         path: A string of the path to load the data from.
     """
-
     def __init__(self, path: str):
         """
         Inits the class with the data path.

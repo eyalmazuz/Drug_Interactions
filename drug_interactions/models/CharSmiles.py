@@ -8,7 +8,6 @@ class CharSmilesConfig():
     def __init__(self, gru_layers: int=2, gru_units: int=32, gru_dropout_rate: float=0.2,
                     dropout_rate: float=0.2, num_classes: int=1, **kwargs):
         
-        super().__init__()
         self.gru_layers = gru_layers
         self.gru_units = gru_units
         self.gru_dropout_rate = gru_dropout_rate
@@ -37,10 +36,8 @@ class CharSmiles(tf.keras.Model):
 
         drug_a_smiles, drug_b_smiles = inputs
 
-
         drug_a_out = self.gru_forward(drug_a_smiles, training=training)
         drug_b_out = self.gru_forward(drug_b_smiles, training=training)
-
 
         concat = tf.concat([drug_a_out, drug_b_out], -1)
         

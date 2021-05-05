@@ -1,19 +1,16 @@
-from typing import List, Dict, Any, Tuple
-from itertools import product
-import random
+from typing import List, Dict, Tuple
 
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
-from sklearn.metrics import roc_auc_score, confusion_matrix
 
-from drug_interactions.utils import webhook_url, send_message
-from drug_interactions.reader.dal import DrugBank
-from drug_interactions.reader.preprocessor import DrugPreprocessor
-
+from drug_interactions.utils import send_message
 
 Data = Tuple[np.ndarray, np.ndarray, List[Tuple[int, int]], Dict[int, List[int]]]
 TrainData = Tuple[List[Tuple[int, int]], List[int]]
+
+tf.random.set_seed(0)
+np.random.seed(0)
 
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
@@ -40,7 +37,7 @@ class Trainer():
         data_type: String indicating which type of data to create.
         propegation_factor: A float of the amount of propegation for the model training.
     """
-    def __init__(self, propegation_factor: float=0.4):
+    def __init__(self, epoch_sample: bool=False):
 
         self.loss_fn = tf.keras.losses.BinaryCrossentropy(from_logits=False)
         self.optimizer = tf.keras.optimizers.Adam()
@@ -49,9 +46,9 @@ class Trainer():
         
         self.val_metrics = [tf.keras.metrics.BinaryCrossentropy(name='Validation BCE'),
                         tf.keras.metrics.AUC(name='Validation AUC')]
+        self.epoch_sample = epoch_sample
 
-    def train(self, model, train_dataset, validation_dataset, epochs: int=5,
-                    batch_size: int=1024, buffer_size=1000, **kwargs):
+    def train(self, model, train_dataset, validation_dataset, epochs: int=5, **kwargs):
         """
         Trains the model.
         
@@ -61,12 +58,17 @@ class Trainer():
             epochs: Number of epochs to train the model.
             batch_size: Size of each batch for the model.
         """
+
+        dataset_type = kwargs.pop('dataset_type')
         print('Start Model Training')
-        train_dataset = train_dataset.shuffle(buffer_size).batch(batch_size)
-        validation_dataset = validation_dataset.shuffle(buffer_size).batch(batch_size)
 
         print('started training')
+        send_message(f'{dataset_type} started training')
         for epoch in range(epochs):
+            
+            if self.epoch_sample:
+                train_dataset.epoch_sample()
+                validation_dataset.epoch_sample()
 
             for metric in self.train_metrics:
                 metric.reset_states()
@@ -74,25 +76,33 @@ class Trainer():
             for metric in self.val_metrics:
                 metric.reset_states()
 
-            for i, (inputs, labels) in tqdm(enumerate(train_dataset)):
-                self.__train_step(model, inputs, labels, **kwargs)
-
-                if (i + 1) % 200 == 0:
+            for i, (inputs, labels) in enumerate(tqdm(train_dataset, leave=False)):
+                preds = self.__train_step(model, inputs, labels, **kwargs)
+                
+                for metric in self.train_metrics:
+                    try:
+                        metric.update_state(y_true=labels, y_pred=preds)
+                    except Exception:
+                        print(preds.shape, labels.shape)
+                        send_message(f'{preds.shape=}, {labels.shape=}')
+                if (i + 1) % 500 == 0:
                     for metric in self.train_metrics:
-                        print(f'{metric.name}: {metric.result().numpy()}', end=' ')
-                        send_message(f'Step {(i + 1)}: {metric.name}: {metric.result().numpy()}')
+                        print(f'{metric.name}: {round(metric.result().numpy(), 4)}', end=' ')
+                        send_message(f'{dataset_type} Step {(i + 1)}: {metric.name}: {round(metric.result().numpy(), 4)}')
                     print()
 
-            # model.propegate_weights()
+            if hasattr(model, 'propegate_weights'):
+                model.propegate_weights()
             print(f'Epoch: {epoch + 1} finished')
-            send_message(f'Epoch: {epoch + 1} finished')
+            send_message(f'{dataset_type} Epoch: {epoch + 1} finished')
 
             for _, (inputs, labels) in tqdm(enumerate(validation_dataset)):
                 self.__validation_step(model, inputs, labels, **kwargs)
             
             for metric in self.val_metrics:
-                print(f'{metric.name}: {metric.result().numpy()}', end=' ')
-                send_message(f'{metric.name}: {metric.result().numpy()}')
+                print(f'{metric.name}: {round(metric.result().numpy(), 4)}', end=' ')
+                send_message(f'{dataset_type} {metric.name}: {round(metric.result().numpy(), 4)}')
+                print()
             print('Done Validation.')
 
         print('Finished training')
@@ -109,9 +119,10 @@ class Trainer():
             labels: A tensorflow's Tensor shape: [batch_size] containing binary labels.
         """
         predictions = model(inputs, training=False, **kwargs)
+
         for metric in self.val_metrics:
             metric.update_state(y_true=labels, y_pred=predictions)
-    
+
     @tf.function()
     def __train_step(self, model, inputs: tf.Tensor, labels: tf.Tensor, **kwargs) -> None:
         """
@@ -125,65 +136,8 @@ class Trainer():
         """
         with tf.GradientTape() as tape:
             predictions = model(inputs, training=True, **kwargs)
-            loss = self.loss_fn(y_true=labels, y_pred=predictions)        
+            loss = self.loss_fn(y_true=labels, y_pred=predictions)
         gradients = tape.gradient(loss, model.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
-        for metric in self.train_metrics:
-            metric.update_state(y_true=labels, y_pred=predictions)
-
-
-    def predict(self, model, test_dataset, batch_size: int=1024, buffer_size: int=1*10**5, **kwargs):
-        """
-        Predicting on new Drugs and comparing to the values in the test matrix.
-        
-        Args:
-            batch_size: size of the batch
-            mean_vector: A boolean indicates if to use the untrained new drug embedding or take the average of existing drugs.
-        """
-        print('Building test dataset.')
-        test_dataset = test_dataset.shuffle(buffer_size).batch(batch_size)
-        test_metrics = [tf.keras.metrics.BinaryCrossentropy(name='Test BCE'),
-                        tf.keras.metrics.AUC(name='Test AUC')]
-
-        for metric in test_metrics:
-                metric.reset_states()
-
-        predictions, labels = [], []
-        print('Predicting on the test dataset.')
-        send_message('Predicting on the test dataset.')
-        for _, (inputs, labels_batch) in tqdm(enumerate(test_dataset)):
-            preds = self.__test_step(model, inputs, labels_batch, test_metrics, **kwargs)
-
-            predictions += [x[0] for x in preds.numpy().tolist()]
-            labels += labels_batch.numpy().tolist()
-        
-        binary_predictions = [1 if x > 0.5 else 0 for x in predictions]
-
-        print('Done predicting.')
-        for metric in test_metrics:
-            print(f'{metric.name}: {metric.result().numpy()}', end=' ')
-            send_message(f'{metric.name}: {metric.result().numpy()}')
-        
-        print(tf.math.confusion_matrix(labels, binary_predictions))
-        send_message(f'{tf.math.confusion_matrix(labels, binary_predictions)}')
-
-    @tf.function()
-    def __test_step(self, model, inputs: tf.Tensor,
-                        labels: tf.Tensor, metrics: List[tf.keras.metrics.Metric], **kwargs) -> None:
-        """
-        Single model test step.
-        after predicting on a single batch, we update the training metrics for the model.
-
-        Args:
-            drug_a_batch: A tensorflow's Tensor shape: [batch_size, 1] containing drug ids.
-            drug_b_batch: A tensorflow's Tensor shape: [batch_size, 1] containing drug ids.
-            labels: A tensorflow's Tensor shape: [batch_size] containing binary labels.
-            mean_vector: A boolean indicates if to use the untrained new drug embedding or take the average of existing drugs.
-        """
-        predictions = model(inputs, training=False, **kwargs)
-        for metric in metrics:
-            metric.update_state(y_true=labels, y_pred=predictions)
-        
         return predictions
-    

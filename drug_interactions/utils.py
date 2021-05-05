@@ -1,7 +1,7 @@
 import json
 import requests
 
-webhook_url = 'https://discord.com/api/webhooks/791261360558178324/KgcGEmNWPkM227ZtwWnmEERz0n37Fb642WOgpEWfu5BUan1WhJAVqg95ombetfy6M37y'
+webhook_url = 'https://discord.com/api/webhooks/831222360102142052/oiWQffWWECZCFDIDylr9hZuAV909DXifDX0WKZWTinq6tS8LDamfD2PjsuDekIkUIf6y'
 
 def send_message(text: str):
     headers = {'Content-Type': 'application/json'}

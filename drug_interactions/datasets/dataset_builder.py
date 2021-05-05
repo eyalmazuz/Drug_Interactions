@@ -1,40 +1,143 @@
-from abc import ABC, abstractmethod
 from enum import Enum
 from itertools import product
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
-import re
-from typing import List, Dict, Tuple, Optional, Any
-import random
+from typing import List, Any
 
 import numpy as np
-import tensorflow as tf
+from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
+from drug_interactions.datasets.Datasets import TrainDataset, TestDataset
 from drug_interactions.reader.dal import DrugBank
-from drug_interactions.datasets.ColdStartDataset import ColdStartDrugDataset
-from drug_interactions.datasets.DatasetUtils import DatasetTypes, Data
-from drug_interactions.datasets.IntersectionDataset import IntersectionDrugDataset
-from drug_interactions.datasets.OneHotSmilesDataset import OneHotSmilesDrugDataset
-from drug_interactions.datasets.DeepSmilesDataset import DeepSmilesDrugDataset
 
+class DatasetTypes(Enum):
+    COLD_START = 1
+    ONEHOT_SMILES = 2
+    DEEP_SMILES = 3
+    CHAR_2_VEC = 4
+    BINARY_SMILES = 5
 
-def get_dataset(data_type: DatasetTypes, old_drug_bank: DrugBank,
-                new_drug_bank: DrugBank, neg_pos_ratio: float, validation_size: float=0.2, **kwargs) -> Optional[Data]:
-    if data_type == DatasetTypes.COLD_START:
-        data = ColdStartDrugDataset(old_drug_bank, new_drug_bank, neg_pos_ratio, **kwargs).build_dataset(validation_size=validation_size)
+def get_dataset(old_drug_bank: DrugBank,
+                new_drug_bank: DrugBank,
+                feature_list: List[Any],
+                **kwargs):
 
-    elif data_type == DatasetTypes.ONEHOT_SMILES:
-        data = OneHotSmilesDrugDataset(old_drug_bank, new_drug_bank, neg_pos_ratio, **kwargs).build_dataset()
+    metadata = {}
+    old_drug_bank = get_smiles_drugs(old_drug_bank, kwargs["atom_size"])
+    new_drug_bank = get_smiles_drugs(new_drug_bank, kwargs["atom_size"])
 
-    elif data_type == DatasetTypes.INTERSECTION:
-        # data = IntersectionDrugDataset(old_drug_bank, new_drug_bank, neg_pos_ratio, **kwargs).build_dataset()
-        data = None
+    metadata['old_drug_bank'] = old_drug_bank
+    metadata['new_drug_bank'] = new_drug_bank
 
-    elif data_type == DatasetTypes.DEEP_SMILES:
-        data = DeepSmilesDrugDataset(old_drug_bank, new_drug_bank, neg_pos_ratio, **kwargs).build_dataset()
+    features = {}
+    for feature in feature_list:
+        features[str(feature)] = feature(old_drug_bank, new_drug_bank)
 
-    elif data_type == DatasetTypes.CharVec:
-        data = None
+    train_data, _ = get_train_test_pairs(old_drug_bank, new_drug_bank)
+
+    (pos_instances, pos_labels), (neg_instances, neg_labels) = split_positive_negative(train_data)
+
+    print('Creating validation set.')
+
+    if kwargs["validation_size"] is not None:
+        x_train_pos, x_val_pos, y_train_pos, y_val_pos = train_test_split(pos_instances, pos_labels,
+                                                                        test_size=kwargs["validation_size"],
+                                                                        random_state=42, shuffle=True)
+
+        x_train_neg, x_val_neg, y_train_neg, y_val_neg = train_test_split(neg_instances, neg_labels,
+                                                                        test_size=kwargs["validation_size"],
+                                                                        random_state=42, shuffle=True)
+
+    train_dataset = TrainDataset(pos=(x_train_pos, y_train_pos),
+                                 neg=(x_train_neg, y_train_neg),
+                                 features=features,
+                                 batch_size=kwargs['batch_size'],
+                                 neg_pos_ratio=kwargs["neg_pos_ratio"])
+
+    validation_dataset = TrainDataset(pos=(x_val_pos, y_val_pos),
+                                      neg=(x_val_neg, y_val_neg),
+                                      features=features,
+                                      batch_size=kwargs['batch_size'],
+                                      neg_pos_ratio=kwargs["neg_pos_ratio"])
+
+    test_dataset = TestDataset(path=kwargs['test_path'],
+                               features=features,
+                               batch_size=kwargs["batch_size"])
+
+    return train_dataset, validation_dataset, test_dataset, metadata
+
+def get_train_test_pairs(old_drug_bank, new_drug_bank):
     
-    return data
+    train_drug_ids, new_drug_ids = get_train_test_ids(old_drug_bank, new_drug_bank)
+
+    train_drug_pairs = list(product(train_drug_ids, train_drug_ids))
+    train_drug_pairs = list(set([tuple(sorted(t)) for t in train_drug_pairs if t[0] != t[1]]))
+
+    test_drug_pairs = list(product(new_drug_ids, train_drug_ids))
+    test_drug_pairs += list(set([tuple(sorted(t)) for t in list(product(new_drug_ids, new_drug_ids)) if t[0] != t[1]]))
+
+
+    train_labels = [1 if old_drug_bank.id_to_drug[drug_a].interacts_with(old_drug_bank.id_to_drug[drug_b]) else 0 for drug_a, drug_b in tqdm(train_drug_pairs, desc='building train pairs')]
+    
+    test_labels = []
+    for drug_a, drug_b in tqdm(test_drug_pairs, desc='building test pairs'):
+        try:
+            test_labels += [1] if new_drug_bank.id_to_drug[drug_a].interacts_with(new_drug_bank.id_to_drug[drug_b]) else [0]
+        except Exception:
+            test_labels += [1] if new_drug_bank.id_to_drug[drug_a].interacts_with(old_drug_bank.id_to_drug[drug_b]) else [0]
+    
+    print(f'Number of test positive samples: {len(list(filter(lambda x: x == 1, test_labels)))}')
+    print(f'Number of test negative samples: {len(list(filter(lambda x: x == 0, test_labels)))}')
+
+    return (train_drug_pairs, train_labels), (test_drug_pairs, test_labels)
+
+def get_train_test_ids(old_drug_bank, new_drug_bank):
+    train_drug_ids = set(old_drug_bank.id_to_drug.keys())
+    test_drug_ids = set(new_drug_bank.id_to_drug.keys())
+    new_drug_ids = test_drug_ids - (train_drug_ids & test_drug_ids)
+    print(f'Num of drug in train: {len(train_drug_ids)}')
+    print(f'Num of new drug in test: {len(new_drug_ids)}')
+
+    return train_drug_ids, new_drug_ids
+
+def split_positive_negative(data):
+
+    data, labels = data
+    print('getiing positive samples')
+    idxs = np.where(np.array(labels) == 1)[0]
+    pos_data = [data[i] for i in tqdm(idxs, 'positive')]
+    pos_labels = [1] * len(pos_data)
+
+    print('getting negative samples')
+    idxs = np.where(np.array(labels) == 0)[0]
+    neg_data = [data[i] for i in tqdm(idxs, 'negative')]
+    neg_labels = [0] * len(neg_data)
+
+    return (pos_data, pos_labels), (neg_data, neg_labels)
+
+def get_smiles_drugs(drug_bank: DrugBank,
+                    atom_size: int):
+    """
+    Removes all the drugs that don't have smiles representation from the data.
+    as well as the interactions of drugs without smiles.
+
+    Args:
+        drug_bank: Drug bank object containing drug data.
+
+    Returns:
+        A new drug bank which has only drugs with smiles and interaction between drugs with smiles.
+    """
+    valid_drug_ids = []
+    for drug in drug_bank.drugs:
+        if drug.smiles is not None and len(drug.smiles) <= atom_size:
+            valid_drug_ids.append(drug.id_)
+
+    drugs_with_smiles = [drug for drug in drug_bank.drugs if drug.id_ in valid_drug_ids]
+    for drug in tqdm(drugs_with_smiles, desc='filtering interactions'):
+        new_interactions = [(drug_id, interaction) for drug_id, interaction in drug.interactions if drug_id in valid_drug_ids]
+        drug.interactions = set(new_interactions)
+
+    print(f'{len(drugs_with_smiles)=}')
+    drugs_with_smiles = [drug for drug in drugs_with_smiles if len(drug.interactions) > 0]
+    print(f'{len(drugs_with_smiles)=}')
+    new_bank = DrugBank(drug_bank.version, drugs_with_smiles)
+    return new_bank
