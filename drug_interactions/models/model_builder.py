@@ -9,7 +9,7 @@ from drug_interactions.models.DeepSmiles import DeepSmiles, DeepSmilesConfig
 
 def get_config(model_type: DatasetTypes, **kwargs):
 
-    if model_type == DatasetTypes.COLD_START:
+    if model_type == DatasetTypes.AFMP:
         return AFMPConfig(**kwargs)
 
     elif model_type == DatasetTypes.ONEHOT_SMILES or model_type == DatasetTypes.CHAR_2_VEC:
@@ -23,7 +23,7 @@ def get_model(model_type: DatasetTypes, **kwargs):
 
     config = get_config(model_type, **kwargs)
 
-    if model_type == DatasetTypes.COLD_START:
+    if model_type == DatasetTypes.AFMP:
         return AFMP(config)
 
     elif model_type == DatasetTypes.ONEHOT_SMILES or model_type == DatasetTypes.CHAR_2_VEC:

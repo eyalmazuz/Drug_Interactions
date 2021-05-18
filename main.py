@@ -13,7 +13,7 @@ from drug_interactions.datasets.dataset_builder import get_dataset, DatasetTypes
 from drug_interactions.training.train import Trainer
 from drug_interactions.training.evaluate import predict
 from drug_interactions.models.model_builder import get_model
-from drug_interactions.utils import send_message
+from drug_interactions.utils.utils import send_message
 
 # tf.random.set_seed(0)
 # np.random.seed(0)
@@ -35,10 +35,9 @@ def main():
     print(f'max drug smile length: {max(smiles_length)}')
 
     types = {
-        '1': DatasetTypes.COLD_START,
+        '1': DatasetTypes.AFMP,
         '2': DatasetTypes.ONEHOT_SMILES,
         '3': DatasetTypes.CHAR_2_VEC,
-        '4': DatasetTypes.DEEP_SMILES,
     }
     dataset_type = types[os.environ['SLURM_ARRAY_TASK_ID']]
     dataset_type_str = str(dataset_type).split(".")[1]
@@ -60,7 +59,8 @@ def main():
     send_message(f'Starting {dataset_type_str}')
     print(f'Starting {dataset_type_str}')
 
-    train_dataset, validation_dataset, test_dataset, metadata = get_dataset(old_drug_bank,
+    (train_dataset, validation_dataset,
+        test_new_old_similar_dataset, test_new_old_similar_only_dataset, metadata) = get_dataset(old_drug_bank,
                                                                             new_drug_bank,
                                                                             feature_list=features,
                                                                             sample=True,
@@ -69,15 +69,17 @@ def main():
                                                                             validation_size=0.2,
                                                                             batch_size=1024,
                                                                             atom_size=300,
-                                                                            test_path='./data/csvs/test.csv',)
+                                                                            data_path='./data/csvs/data',)
 
-    model = get_model(dataset_type, **metadata)
+    model = get_model(dataset_type, **{**metadata, **{'use_scaffold': True}})
 
-    trainer = Trainer(epoch_sample=False)
+    trainer = Trainer(epoch_sample=False, balance=False)
 
     trainer.train(model, train_dataset, validation_dataset, epochs=3, dataset_type=dataset_type_str)
 
-    predict(model, test_dataset, dataset_type=dataset_type_str)
+    predict(model, test_new_old_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewOldSimilar', save=True)
+
+    predict(model, test_new_old_similar_only_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewOldSimilarOnly', save=True)
 
 if __name__ == "__main__":
     main()

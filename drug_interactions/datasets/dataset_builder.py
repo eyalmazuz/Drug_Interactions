@@ -1,8 +1,10 @@
 from enum import Enum
 from itertools import product
 from typing import List, Any
+import os
 
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
@@ -10,7 +12,7 @@ from drug_interactions.datasets.Datasets import TrainDataset, TestDataset
 from drug_interactions.reader.dal import DrugBank
 
 class DatasetTypes(Enum):
-    COLD_START = 1
+    AFMP = 1
     ONEHOT_SMILES = 2
     DEEP_SMILES = 3
     CHAR_2_VEC = 4
@@ -32,7 +34,7 @@ def get_dataset(old_drug_bank: DrugBank,
     for feature in feature_list:
         features[str(feature)] = feature(old_drug_bank, new_drug_bank)
 
-    train_data, _ = get_train_test_pairs(old_drug_bank, new_drug_bank)
+    train_data = get_train_test_pairs(old_drug_bank, new_drug_bank, kwargs['data_path'])
 
     (pos_instances, pos_labels), (neg_instances, neg_labels) = split_positive_negative(train_data)
 
@@ -59,36 +61,75 @@ def get_dataset(old_drug_bank: DrugBank,
                                       batch_size=kwargs['batch_size'],
                                       neg_pos_ratio=kwargs["neg_pos_ratio"])
 
-    test_dataset = TestDataset(path=kwargs['test_path'],
+    test_new_old_dataset = TestDataset(path=f'{kwargs["data_path"]}/test_new_old_similar.csv',
                                features=features,
                                batch_size=kwargs["batch_size"])
 
-    return train_dataset, validation_dataset, test_dataset, metadata
+    test_new_new_dataset = TestDataset(path=f'{kwargs["data_path"]}/test_new_old_similar_only.csv',
+                               features=features,
+                               batch_size=kwargs["batch_size"])
 
-def get_train_test_pairs(old_drug_bank, new_drug_bank):
+
+    return (train_dataset, validation_dataset,
+            test_new_old_dataset, test_new_new_dataset, metadata)
+
+
+def get_train_test_pairs(old_drug_bank, new_drug_bank, save_path):
     
     train_drug_ids, new_drug_ids = get_train_test_ids(old_drug_bank, new_drug_bank)
 
     train_drug_pairs = list(product(train_drug_ids, train_drug_ids))
     train_drug_pairs = list(set([tuple(sorted(t)) for t in train_drug_pairs if t[0] != t[1]]))
 
-    test_drug_pairs = list(product(new_drug_ids, train_drug_ids))
-    test_drug_pairs += list(set([tuple(sorted(t)) for t in list(product(new_drug_ids, new_drug_ids)) if t[0] != t[1]]))
-
-
     train_labels = [1 if old_drug_bank.id_to_drug[drug_a].interacts_with(old_drug_bank.id_to_drug[drug_b]) else 0 for drug_a, drug_b in tqdm(train_drug_pairs, desc='building train pairs')]
-    
-    test_labels = []
-    for drug_a, drug_b in tqdm(test_drug_pairs, desc='building test pairs'):
-        try:
-            test_labels += [1] if new_drug_bank.id_to_drug[drug_a].interacts_with(new_drug_bank.id_to_drug[drug_b]) else [0]
-        except Exception:
-            test_labels += [1] if new_drug_bank.id_to_drug[drug_a].interacts_with(old_drug_bank.id_to_drug[drug_b]) else [0]
-    
-    print(f'Number of test positive samples: {len(list(filter(lambda x: x == 1, test_labels)))}')
-    print(f'Number of test negative samples: {len(list(filter(lambda x: x == 0, test_labels)))}')
 
-    return (train_drug_pairs, train_labels), (test_drug_pairs, test_labels)
+    if not os.path.exists(f'{save_path}/test_new_old.csv'):
+        new_old_pairs = list(product(new_drug_ids, train_drug_ids))
+
+        new_old_labels = []
+        for drug_a, drug_b in tqdm(new_old_pairs, desc='building new-old pairs'):
+            new_old_labels += [1] if new_drug_bank.id_to_drug[drug_a].interacts_with(old_drug_bank.id_to_drug[drug_b]) else [0]
+
+
+        test_no_vals = [] 
+        for (drug_a, drug_b), label in zip(new_old_pairs, new_old_labels):
+            smile_a = new_drug_bank.id_to_drug[drug_a].smiles
+            smile_b = old_drug_bank.id_to_drug[drug_b].smiles
+            test_no_vals.append((drug_a, smile_a, drug_b, smile_b, label))
+
+        test_no_df = pd.DataFrame(test_no_vals, columns=['Drug1_ID', 'Drug1_SMILES',
+                                                        'Drug2_ID', 'Drug2_SMILES',
+                                                        'label'])
+
+        test_no_df.to_csv(f'{save_path}/test_new_old.csv', index=False)
+        print(f'Number of new old positive samples: {len(list(filter(lambda x: x == 1, new_old_labels)))}')
+        print(f'Number of new old negative samples: {len(list(filter(lambda x: x == 0, new_old_labels)))}')
+
+
+
+    if not os.path.exists(f'{save_path}/test_new_new.csv'):
+        new_new_pairs = list(set([tuple(sorted(t)) for t in list(product(new_drug_ids, new_drug_ids)) if t[0] != t[1]]))
+
+        new_new_labels = []
+        for drug_a, drug_b in tqdm(new_new_pairs, desc='building new-old pairs'):
+            new_new_labels += [1] if new_drug_bank.id_to_drug[drug_a].interacts_with(new_drug_bank.id_to_drug[drug_b]) else [0]
+
+        test_nn_vals = [] 
+        for (drug_a, drug_b), label in zip(new_new_pairs, new_new_labels):
+            smile_a = new_drug_bank.id_to_drug[drug_a].smiles
+            smile_b = new_drug_bank.id_to_drug[drug_b].smiles
+            test_nn_vals.append((drug_a, smile_a, drug_b, smile_b, label))
+
+        test_nn_df = pd.DataFrame(test_nn_vals, columns=['Drug1_ID', 'Drug1_SMILES',
+                                                        'Drug2_ID', 'Drug2_SMILES',
+                                                        'label'])
+
+        test_nn_df.to_csv(f'{save_path}/test_new_new.csv', index=False)
+
+        print(f'Number of new new positive samples: {len(list(filter(lambda x: x == 1, new_new_labels)))}')
+        print(f'Number of new new negative samples: {len(list(filter(lambda x: x == 0, new_new_labels)))}')
+
+    return (train_drug_pairs, train_labels)
 
 def get_train_test_ids(old_drug_bank, new_drug_bank):
     train_drug_ids = set(old_drug_bank.id_to_drug.keys())

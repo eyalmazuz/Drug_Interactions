@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 
-from drug_interactions.utils import send_message
+from drug_interactions.utils.utils import send_message
 
 Data = Tuple[np.ndarray, np.ndarray, List[Tuple[int, int]], Dict[int, List[int]]]
 TrainData = Tuple[List[Tuple[int, int]], List[int]]
@@ -37,7 +37,7 @@ class Trainer():
         data_type: String indicating which type of data to create.
         propegation_factor: A float of the amount of propegation for the model training.
     """
-    def __init__(self, epoch_sample: bool=False):
+    def __init__(self, epoch_sample: bool=False, balance: bool=False):
 
         self.loss_fn = tf.keras.losses.BinaryCrossentropy(from_logits=False)
         self.optimizer = tf.keras.optimizers.Adam()
@@ -47,6 +47,7 @@ class Trainer():
         self.val_metrics = [tf.keras.metrics.BinaryCrossentropy(name='Validation BCE'),
                         tf.keras.metrics.AUC(name='Validation AUC')]
         self.epoch_sample = epoch_sample
+        self.balance = balance
 
     def train(self, model, train_dataset, validation_dataset, epochs: int=5, **kwargs):
         """
@@ -64,11 +65,15 @@ class Trainer():
 
         print('started training')
         send_message(f'{dataset_type} started training')
+        if self.balance:
+            train_dataset.sample()
+            validation_dataset.sample()
+
         for epoch in range(epochs):
             
             if self.epoch_sample:
-                train_dataset.epoch_sample()
-                validation_dataset.epoch_sample()
+                train_dataset.sample()
+                validation_dataset.sample()
 
             for metric in self.train_metrics:
                 metric.reset_states()

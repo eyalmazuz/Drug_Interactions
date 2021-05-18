@@ -1,14 +1,19 @@
 import numpy as np
+from rdkit import Chem
+from rdkit.Chem.Scaffolds import MurckoScaffold
 import tensorflow as tf
 from tensorflow.keras.layers import Embedding, Dropout, Dense
 
 class AFMPConfig():
 
     def __init__(self, embedding_size: int=256, dropout_rate: float=0.3,
-                    propegation_factor: float=0.4, num_classes: int=1, use_mean_vector: bool=False, **kwargs):
+                    propegation_factor: float=0.4, num_classes: int=1, use_mean_vector: bool=False,
+                    **kwargs):
 
         super().__init__()
-        self.num_drugs = len(set(kwargs['old_drug_bank'].id_to_drug.keys()) | set(kwargs['new_drug_bank'].id_to_drug.keys()))
+        old_drug_bank = kwargs['old_drug_bank']
+        new_drug_bank = kwargs['new_drug_bank']
+        self.num_drugs = len(set(old_drug_bank.id_to_drug.keys()) | set(new_drug_bank.id_to_drug.keys()))
         self.embedding_size = embedding_size
         self.dropout_rate = dropout_rate
         self.propegation_factor = propegation_factor
@@ -31,6 +36,8 @@ class AFMP(tf.keras.Model):
         self.propegation_factor = config.propegation_factor
         self.use_mean_vector = config.use_mean_vector
 
+        self.old_drug_bank = config.kwargs['old_drug_bank']
+        self.new_drug_bank = config.kwargs['new_drug_bank']
 
     def call(self, inputs, training=False):
 
@@ -41,8 +48,10 @@ class AFMP(tf.keras.Model):
             drug_a_emb = self.drug_embedding(np.array(list(self.drug_graph.keys())), training=True)
             drug_a_emb = tf.math.reduce_mean(drug_a_emb, axis=0)
             drug_a_emb = tf.repeat([drug_a_emb], drug_b.shape[0], axis=0)
+        
         else:
             drug_a_emb = self.drug_embedding(drug_a, training=True)
+
 
         drug_a_emb = self.dropout(drug_a_emb, training=training)
 
@@ -93,11 +102,11 @@ class AFMP(tf.keras.Model):
         train_drug_ids = set(old_drug_bank.id_to_drug.keys()) 
         test_drug_ids = set(new_drug_bank.id_to_drug.keys())  
 
-        sorted_drug_ids = sorted(list(train_drug_ids | test_drug_ids))
+        self.sorted_drug_ids = sorted(list(train_drug_ids | test_drug_ids))
 
         drug_graph = {}
         for drug in old_drug_bank.drugs:
-            drug_index = sorted_drug_ids.index(drug.id_)
-            drug_graph[drug_index] = [sorted_drug_ids.index(drug_id) for drug_id, _ in drug.interactions]
+            drug_index = self.sorted_drug_ids.index(drug.id_)
+            drug_graph[drug_index] = [self.sorted_drug_ids.index(drug_id) for drug_id, _ in drug.interactions]
 
         return drug_graph

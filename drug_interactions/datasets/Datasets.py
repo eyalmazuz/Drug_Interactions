@@ -56,7 +56,7 @@ class TrainDataset(Sequence):
         drug_features = np.array([feature[drug] for drug in drugs])
         return drug_features
     
-    def epoch_sample(self,):
+    def sample(self,):
         print("In epoch sample")
         negative_indexes = random.sample(range(len(self.x_neg)), k=int(self.neg_pos_ratio * len(self.x_pos)))
 
@@ -82,8 +82,8 @@ class TestDataset(Sequence):
         self.features = features
         self.batch_size = batch_size
 
-        drug_a_list = self.test_data['smile_a'].tolist()
-        drug_b_list = self.test_data['smile_b'].tolist()
+        drug_a_list = self.test_data['Drug1_ID'].tolist()
+        drug_b_list = self.test_data['Drug2_ID'].tolist()
         self.x_test = list(zip(drug_a_list, drug_b_list))
         self.y_test = self.test_data['label']
 

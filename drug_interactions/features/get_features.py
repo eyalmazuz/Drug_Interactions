@@ -6,7 +6,7 @@ from drug_interactions.features.OneHotFeature import OneHotFeature
 
 def get_features(dataset_type, **kwargs):
     features = []
-    if dataset_type == DatasetTypes.COLD_START:
+    if dataset_type == DatasetTypes.AFMP:
         features = [EmbeddingFeature(**kwargs)]
 
     elif dataset_type == DatasetTypes.ONEHOT_SMILES:
