@@ -7,10 +7,10 @@ from sklearn.metrics import log_loss, roc_auc_score, precision_score, precision_
 from tqdm import tqdm, trange
 tqdm.pandas()
 
-test_df = pd.read_csv('./data/csvs/data/test_new_new.csv')
+test_df = pd.read_csv('./data/csvs/data/test_all_similar.csv')
 test_df = test_df.sort_values(by=['Drug1_ID', 'Drug2_ID'], ascending=True).reset_index(drop=True)
 
-path = './data/csvs/results/All_Data/NewNew'
+path = './data/csvs/results/All_Data/AllSimilar'
 
 models = []
 for model in os.listdir(path):
@@ -18,7 +18,7 @@ for model in os.listdir(path):
         print(model)
         df_path = os.path.join(path, model)
         df = pd.read_csv(df_path)
-        df = df.sort_values(by=['smile_a', 'smile_b'], ascending=True).reset_index(drop=True)
+        df = df.sort_values(by=['Drug1_ID', 'Drug2_ID'], ascending=True).reset_index(drop=True)
         model = model.split('.')[0]
         models.append(model)
         test_df[model] = df['prediction']
@@ -28,9 +28,9 @@ print(test_df.head())
 
 print(models)
 df = test_df.copy()
-df['mean'] = df[['CHEMPROP', "AFMP"]].mean(axis=1)
+df['mean'] = df[models].mean(axis=1)
 results = {}
-results['dataset_type'] = 'CHEMPROP+AFMP'
+results['dataset_type'] = 'ENSEMBLE'
 
 print(df.isna().sum())
 label, prediction = df.label.tolist(), df['mean'].tolist()
@@ -47,21 +47,14 @@ print(f'Test BCE: {bce}')
 print(f'Test AUC: {roc_auc}')
 print(f'Test PR-AUC: {pr_auc}')
 
-top_k = list(range(1, 21)) + [40, 60, 80, 100]
+top_k = list(range(1, 6)) + [10, 20, 50, 100, 200]
 
 df = df.sort_values('mean', ascending=False)
 df['class'] = df['mean'].progress_apply(lambda x: 1 if x > 0.5 else 0)
 
-for k in top_k:
-    y_true = np.array(df.label.tolist())
-    y_pred = np.array(df['class'].tolist())
-    precision_k = round(precision_score(y_true=y_true[:k], y_pred=y_pred[:k], zero_division=0), 4)
-    print(f'Precision@{k}: {precision_k}')
-    results[f'Precision@{k}'] = precision_k
-
 grouped_test = df.groupby('Drug1_ID')
 
-for k in trange(1, 6):
+for k in tqdm(top_k):
     average_precision = 0.0
     for (_, smile_group) in tqdm(grouped_test, leave=False):
         smile_group = smile_group.sort_values('mean', ascending=False)

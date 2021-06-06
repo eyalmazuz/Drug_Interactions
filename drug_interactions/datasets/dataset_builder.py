@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
-from drug_interactions.datasets.Datasets import TrainDataset, TestDataset
+from drug_interactions.datasets.Datasets import TrainDataset, NewOldTestDataset, NewNewTestDataset
 from drug_interactions.reader.dal import DrugBank
 
 class DatasetTypes(Enum):
@@ -61,17 +61,25 @@ def get_dataset(old_drug_bank: DrugBank,
                                       batch_size=kwargs['batch_size'],
                                       neg_pos_ratio=kwargs["neg_pos_ratio"])
 
-    test_new_old_dataset = TestDataset(path=f'{kwargs["data_path"]}/test_new_old_similar.csv',
+    test_new_old_dataset = NewOldTestDataset(path=f'{kwargs["data_path"]}/test_new_old_similar.csv',
                                features=features,
                                batch_size=kwargs["batch_size"])
 
-    test_new_new_dataset = TestDataset(path=f'{kwargs["data_path"]}/test_new_old_similar_only.csv',
+    test_new_new_dataset = NewNewTestDataset(path=f'{kwargs["data_path"]}/test_new_new_similar.csv',
                                features=features,
                                batch_size=kwargs["batch_size"])
 
+    # test_all_dataset = TestDataset(path=f'{kwargs["data_path"]}/test_all_similar.csv',
+    #                            features=features,
+    #                            batch_size=kwargs["batch_size"])
 
-    return (train_dataset, validation_dataset,
-            test_new_old_dataset, test_new_new_dataset, metadata)
+
+    return (train_dataset,
+            validation_dataset,
+            test_new_old_dataset,
+            test_new_new_dataset,
+            # test_all_dataset,
+            metadata)
 
 
 def get_train_test_pairs(old_drug_bank, new_drug_bank, save_path):

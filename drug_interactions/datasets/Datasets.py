@@ -1,4 +1,5 @@
 import random
+from re import L
 from typing import List, Tuple, Dict
 
 import numpy as np
@@ -71,7 +72,7 @@ class TrainDataset(Sequence):
         self.x, self.y = zip(*data)
         print(f"len of data: {len(self.x)}")
 
-class TestDataset(Sequence):
+class NewOldTestDataset(Sequence):
 
     def __init__(self,
         path: str,
@@ -82,9 +83,10 @@ class TestDataset(Sequence):
         self.features = features
         self.batch_size = batch_size
 
-        drug_a_list = self.test_data['Drug1_ID'].tolist()
+        self.drug_a_list = self.test_data['Drug1_ID'].tolist()
+        drug_a_similar_list = self.test_data['Drug1_ID_SIMILAR'].tolist()
         drug_b_list = self.test_data['Drug2_ID'].tolist()
-        self.x_test = list(zip(drug_a_list, drug_b_list))
+        self.x_test = list(zip(drug_a_similar_list, drug_b_list))
         self.y_test = self.test_data['label']
 
     def __len__(self, ):
@@ -93,6 +95,8 @@ class TestDataset(Sequence):
     def __getitem__(self, idx):
         batch_drugs = self.x_test[idx * self.batch_size:(idx + 1) * self.batch_size]
         batch_labels = self.y_test[idx * self.batch_size:(idx + 1) * self.batch_size]
+ 
+        drug_a_ids = self.drug_a_list[idx * self.batch_size:(idx + 1) * self.batch_size]
 
         drug_a, drug_b = list(zip(*batch_drugs))
 
@@ -110,7 +114,57 @@ class TestDataset(Sequence):
 
         batch_labels = np.array(batch_labels).reshape(-1, 1)
 
-        return (drug_a, drug_b), ((drug_a_features, drug_b_features), batch_labels)
+        return (drug_a_ids, drug_b), ((drug_a_features, drug_b_features), batch_labels)
+
+    def get_drug_features(self, drugs, feature):
+        drug_features = np.array([feature[drug] for drug in drugs])
+        return drug_features
+
+class NewNewTestDataset(Sequence):
+
+    def __init__(self,
+        path: str,
+        features: Dict[str, Dict[str, np.ndarray]],
+        batch_size: int,):
+
+        self.test_data = pd.read_csv(path)
+        self.features = features
+        self.batch_size = batch_size
+
+        self.drug_a_list = self.test_data['Drug1_ID'].tolist()
+        self.drug_b_list = self.test_data['Drug2_ID'].tolist()
+        drug_a_similar_list = self.test_data['Drug1_ID_SIMILAR'].tolist()
+        drug_b_similar_list = self.test_data['Drug2_ID_SIMILAR'].tolist()
+        self.x_test = list(zip(drug_a_similar_list, drug_b_similar_list))
+        self.y_test = self.test_data['label']
+
+    def __len__(self, ):
+        return len(self.test_data) // self.batch_size + 1
+
+    def __getitem__(self, idx):
+        batch_drugs = self.x_test[idx * self.batch_size:(idx + 1) * self.batch_size]
+        batch_labels = self.y_test[idx * self.batch_size:(idx + 1) * self.batch_size]
+ 
+        drug_a_ids = self.drug_a_list[idx * self.batch_size:(idx + 1) * self.batch_size]
+        drug_b_ids = self.drug_b_list[idx * self.batch_size:(idx + 1) * self.batch_size]
+
+        drug_a, drug_b = list(zip(*batch_drugs))
+
+        drug_a_features = []
+        drug_b_features = []
+        for _, feature in sorted(self.features.items()):
+            drug_a_features.append(self.get_drug_features(drug_a, feature))
+            drug_b_features.append(self.get_drug_features(drug_b, feature))
+
+        if len(drug_a_features) == 1:
+            drug_a_features = drug_a_features[0]
+
+        if len(drug_b_features) == 1:
+            drug_b_features = drug_b_features[0]
+
+        batch_labels = np.array(batch_labels).reshape(-1, 1)
+
+        return (drug_a_ids, drug_b_ids), ((drug_a_features, drug_b_features), batch_labels)
 
     def get_drug_features(self, drugs, feature):
         drug_features = np.array([feature[drug] for drug in drugs])
