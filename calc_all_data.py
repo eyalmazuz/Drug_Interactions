@@ -11,7 +11,7 @@ def main():
     # dataset_type = "CHEMPROP_AFMP"
     path = './data/csvs/results/All_Data/'
     # calc_metrics(path, dataset_type)
-    for no, nn in zip(sorted(os.listdir(f'{path}/NewOldSimilar')), sorted(os.listdir(f'{path}/NewNewSimilar'))):
+    for no, nn in zip(sorted(os.listdir(f'{path}/NewOldChempropSimilar')), sorted(os.listdir(f'{path}/NewNewChempropSimilar'))):
         if no != 'Metrics.csv':
             print(no)
             d1 = pd.read_csv(f'{path}/NewOldSimilar/{no}')
@@ -19,7 +19,7 @@ def main():
             df = d1.append(d2)
             dataset_type = no.split('.')[0]
 
-            calc_metrics(f'{path}/AllSimilar', dataset_type, df=df)
-            df.to_csv(f'{path}/AllSimilar/{no}', index=False)
+            calc_metrics(f'{path}/AllChempropSimilar', dataset_type, df=df)
+            df.to_csv(f'{path}/AllChempropSimilar/{no}', index=False)
 if __name__ == "__main__":
     main()

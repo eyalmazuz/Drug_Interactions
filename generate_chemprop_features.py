@@ -7,12 +7,12 @@ from tqdm import tqdm
 with open("./sorted_ids.txt", 'r') as f:
     sorted_ids = eval(f.read())
 
-df = pd.read_csv('./data/csvs/data/test_all_similar.csv')
+df = pd.read_csv('./data/csvs/data/test_new_new_chemprop_similar.csv')
 
 drug_emb = np.load('./drug_emb.npy')[0]
 drug_bias = np.load('./drug_bias.npy')[0]
 
-with open('./data/csvs/chemprop/additional_features_all_similar.csv', 'w') as f:
+with open('./data/csvs/chemprop/additional_features_new_new_chemprop_similar.csv', 'w') as f:
     writer = csv.writer(f, delimiter=',')
 
     n_features = drug_emb.shape[1]

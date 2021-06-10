@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
-from drug_interactions.datasets.Datasets import TrainDataset, NewOldTestDataset, NewNewTestDataset
+from drug_interactions.datasets.Datasets import TrainDataset, TestDataset, NewOldTestDataset, NewNewTestDataset, TTATestDataset
 from drug_interactions.reader.dal import DrugBank
 
 class DatasetTypes(Enum):
@@ -61,11 +61,16 @@ def get_dataset(old_drug_bank: DrugBank,
                                       batch_size=kwargs['batch_size'],
                                       neg_pos_ratio=kwargs["neg_pos_ratio"])
 
-    test_new_old_dataset = NewOldTestDataset(path=f'{kwargs["data_path"]}/test_new_old_similar.csv',
-                               features=features,
-                               batch_size=kwargs["batch_size"])
+    # test_new_old_dataset = TTATestDataset(path=f'{kwargs["data_path"]}/test_new_old_similar.csv',
+    #                            features=features,
+    #                            similar_map_path='./data/jsons/similar_drugs_dict_only_old.json',
+    #                            )
 
-    test_new_new_dataset = NewNewTestDataset(path=f'{kwargs["data_path"]}/test_new_new_similar.csv',
+    test_new_old_dataset = NewOldTestDataset(path=f'{kwargs["data_path"]}/test_new_old_chemprop_similar.csv',
+                               features=features,
+                               batch_size=kwargs["batch_size"],)
+
+    test_new_new_dataset = NewNewTestDataset(path=f'{kwargs["data_path"]}/test_new_new_chemprop_similar.csv',
                                features=features,
                                batch_size=kwargs["batch_size"])
 

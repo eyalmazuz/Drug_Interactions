@@ -5,6 +5,7 @@ from tqdm import tqdm
 tqdm.pandas()
 
 from drug_interactions.utils.calc_metrics import calc_average_precision_k, calc_mrr
+
 def load_df(path, dataset_type=None):
     if dataset_type is not None:
         df = pd.read_csv(f'{path}/{dataset_type}.csv')
@@ -19,18 +20,17 @@ def main():
 
     test = load_df('./data/csvs/data/test_all_similar.csv')
 
-    models = ['AFMP', 'CHEMPROP']
-    dataset_type = 'SWITCHING'
+    newold_model = 'AFMP'
+    newnew_model = 'CASTER'
 
-    for model in models:
-        df = load_df('./data/csvs/results/All_Data/AllSimilar', model)
-        test[model] = df.prediction
+    dataset_type = f'{newold_model}_OLD_{newnew_model}_NEW_SWITCHING'
 
-    predictions = list(test[models].itertuples(index=False, name=None))
 
-    predictions = [s if 0.4 < s < 0.6 else f for (f,s) in predictions]
+    old_new_df = pd.read_csv(f'./data/csvs/results/All_Data/NewOldSimilar/{newold_model}.csv')
+    new_new_df = pd.read_csv(f'./data/csvs/results/All_Data/NewNewSimilar/{newnew_model}.csv')
 
-    test['prediction'] = predictions
+    test = old_new_df.append(new_new_df)
+
     df = test.copy()
 
     results = {}
@@ -60,6 +60,10 @@ def main():
     print()
 
     results["MRR"] = calc_mrr(df)
+
+    metrics = pd.read_csv(f'./data/csvs/results/All_Data/Tricks/Metrics.csv')
+    metrics = metrics.append(pd.Series(results), ignore_index=True)
+    metrics.to_csv(f'./data/csvs/results/All_Data/Tricks/Metrics.csv', index=False)
 
 if __name__ == "__main__":
     main()

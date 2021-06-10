@@ -1,7 +1,7 @@
 import os
 
-from tensorflow.python.keras.layers import embeddings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+from tensorflow.python.keras.layers import embeddings
 import sys
 print(sys.path)
 import random 
@@ -82,11 +82,9 @@ def main():
 
     trainer.train(model, train_dataset, validation_dataset, epochs=3, dataset_type=dataset_type_str)
 
-    # predict(model, test_new_old_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewOldSimilar', save=True)
+    predict(model, test_new_old_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewOldChempropSimilar', save=True)
 
-    predict(model, test_new_new_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewNewSimilar', save=True)
-
-    # predict(model, test_all_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/AllSimilar', save=True)
+    predict(model, test_new_new_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewNewChempropSimilar', save=True)
 
 if __name__ == "__main__":
     main()

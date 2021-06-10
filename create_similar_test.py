@@ -5,12 +5,11 @@ from tqdm import tqdm, trange
 tqdm.pandas()
 
 def main():
-
-    test = pd.read_csv('./data/csvs/data/test_new_new.csv')
+    test = pd.read_csv('./data/csvs/data/test_new_old.csv')
     old_new = pd.read_csv('./data/csvs/data/test_new_old.csv')
     old_new = old_new[['Drug2_ID', 'Drug2_SMILES']] 
 
-    with open('./data/jsons/similar_drugs_dict_only_old.json', 'r') as f:
+    with open('./data/jsons/chemprop_similar_drugs_dict_only_old.json', 'r') as f:
         similar_dict = json.load(f)
 
     old_drug_ids = test.Drug2_ID.tolist()
@@ -38,20 +37,22 @@ def main():
     test_similar["Drug1_ID_SIMILAR"] = test_similar.Drug1_ID.progress_apply(lambda i: id2id[i] if i in id2id else i)
     test_similar["Drug1_SMILES_SIMILAR"] = test_similar.Drug1_SMILES.progress_apply(lambda s: smiles2smiles[s] if s in smiles2smiles else s)
 
-    test_similar["Drug2_ID_SIMILAR"] = test_similar.Drug2_ID.progress_apply(lambda i: id2id[i] if i in id2id else i)
-    test_similar["Drug2_SMILES_SIMILAR"] = test_similar.Drug2_SMILES.progress_apply(lambda s: smiles2smiles[s] if s in smiles2smiles else s)
+    # test_similar["Drug2_ID_SIMILAR"] = test_similar.Drug2_ID.progress_apply(lambda i: id2id[i] if i in id2id else i)
+    # test_similar["Drug2_SMILES_SIMILAR"] = test_similar.Drug2_SMILES.progress_apply(lambda s: smiles2smiles[s] if s in smiles2smiles else s)
 
     test_similar_only["Drug1_ID_SIMILAR"] = test_similar_only.Drug1_ID.progress_apply(lambda i: id2id[i] if i in id2id else i)
     test_similar_only["Drug1_SMILES_SIMILAR"] = test_similar_only.Drug1_SMILES.progress_apply(lambda s: smiles2smiles[s] if s in smiles2smiles else s)
 
-    test_similar_only["Drug2_ID_SIMILAR"] = test_similar_only.Drug2_ID.progress_apply(lambda i: id2id[i] if i in id2id else i)
-    test_similar_only["Drug2_SMILES_SIMILAR"] = test_similar_only.Drug2_SMILES.progress_apply(lambda s: smiles2smiles[s] if s in smiles2smiles else s)
+    # test_similar_only["Drug2_ID_SIMILAR"] = test_similar_only.Drug2_ID.progress_apply(lambda i: id2id[i] if i in id2id else i)
+    # test_similar_only["Drug2_SMILES_SIMILAR"] = test_similar_only.Drug2_SMILES.progress_apply(lambda s: smiles2smiles[s] if s in smiles2smiles else s)
 
     print(test_similar.shape)
     print(test_similar_only.shape)
 
-    test_similar.to_csv('./data/csvs/data/test_new_new_similar.csv', index=False)
-    test_similar_only.to_csv('./data/csvs/data/test_new_new_similar_only.csv', index=False)
+    test_similar.to_csv('./data/csvs/data/test_new_old_chemprop_similar.csv', index=False)
+    test_similar_only.to_csv('./data/csvs/data/test_new_old_chemprop_similar_only.csv', index=False)
 
+
+    
 if __name__ == "__main__":
    main()

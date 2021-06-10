@@ -7,10 +7,10 @@ from sklearn.metrics import log_loss, roc_auc_score, precision_score, precision_
 from tqdm import tqdm, trange
 tqdm.pandas()
 
-test_df = pd.read_csv('./data/csvs/data/test_all_similar.csv')
+test_df = pd.read_csv('./data/csvs/data/test_all_chemprop_similar.csv')
 test_df = test_df.sort_values(by=['Drug1_ID', 'Drug2_ID'], ascending=True).reset_index(drop=True)
 
-path = './data/csvs/results/All_Data/AllSimilar'
+path = './data/csvs/results/All_Data/AllChempropSimilar'
 
 models = []
 for model in os.listdir(path):
