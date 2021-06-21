@@ -138,7 +138,7 @@ class TestDataset(Sequence):
     def get_drug_features(self, drugs, feature):
         drug_features = np.array([feature[drug] for drug in drugs])
         return drug_features
- 
+
 class TTATestDataset(Sequence):
 
     def __init__(self,
@@ -158,23 +158,28 @@ class TTATestDataset(Sequence):
         self.y_test = self.test_data['label']
 
     def __len__(self, ):
-        return 1
+        return len(self.drug_a_list)
 
     def __getitem__(self, idx):
 
         drug_a = self.drug_a_list[idx]
         drug_b = self.drug_b_list[idx]
-
+        drug_a_id = drug_a
+        drug_b_id = drug_b
+        
         drug_a_similars = self.similar_map[drug_a]
-
         if drug_a_similars:
             num_tta = min(3, len(drug_a_similars))
             tta_ids, tta_weights = list(zip(*drug_a_similars[:num_tta]))
 
-        batch_drugs = list(zip(tta_ids, [drug_b] * num_tta))
-        batch_labels = [self.y_test[idx]] * num_tta
- 
-        drug_a, drug_b = list(zip(*batch_drugs))
+            drug_a = list(tta_ids)
+            drug_b = [drug_b] * num_tta
+            batch_labels = [self.y_test[idx]]
+        else:
+            drug_a = [drug_a]
+            drug_b = [drug_b]
+            tta_weights = []
+            batch_labels = [self.y_test[idx]]
 
         drug_a_features = []
         drug_b_features = []
@@ -190,11 +195,97 @@ class TTATestDataset(Sequence):
 
         batch_labels = np.array(batch_labels).reshape(-1, 1)
 
-        return (drug_a, drug_b), ((drug_a_features, drug_b_features), batch_labels), tta_weights
+        return (drug_a_id, drug_b_id), ((drug_a_features, drug_b_features), batch_labels), tta_weights
 
     def get_drug_features(self, drugs, feature):
         drug_features = np.array([feature[drug] for drug in drugs])
         return drug_features
+
+class TTANNTestDataset(Sequence):
+
+    def __init__(self,
+        path: str,
+        features: Dict[str, Dict[str, np.ndarray]],
+        similar_map_path: str,
+        ):
+
+        self.test_data = pd.read_csv(path)
+        self.features = features
+
+        with open(similar_map_path, 'r') as f:
+            self.similar_map = json.load(f)
+
+        self.drug_a_list = self.test_data['Drug1_ID'].tolist()
+        self.drug_b_list = self.test_data['Drug2_ID'].tolist()
+        self.y_test = self.test_data['label']
+
+    def __len__(self, ):
+        return len(self.drug_a_list)
+
+    def __getitem__(self, idx):
+
+        drug_a = self.drug_a_list[idx]
+        drug_b = self.drug_b_list[idx]
+        drug_a_id = drug_a
+        drug_b_id = drug_b
+        
+        drug_a_similars = self.similar_map[drug_a]
+        drug_b_similars = self.similar_map[drug_b]
+
+        if drug_a_similars and drug_b_similars:
+            num_tta = min(3, len(drug_a_similars), len(drug_b_similars))
+            tta_a_ids, tta_a_weights = list(zip(*drug_a_similars[:num_tta]))
+            tta_b_ids, tta_b_weights = list(zip(*drug_b_similars[:num_tta]))
+
+            tta_weights = []
+            for a, b in zip(tta_a_weights, tta_b_weights):
+                h_mean = 2 / (1 / a + 1 / b)
+                tta_weights.append(h_mean)
+
+            drug_a = list(tta_a_ids)
+            drug_b = list(tta_b_ids)
+
+        elif drug_a_similars:
+            num_tta = min(3, len(drug_a_similars))
+            tta_ids, tta_weights = list(zip(*drug_a_similars[:num_tta]))
+
+            drug_a = list(tta_ids)
+            drug_b = [drug_b] * num_tta
+            
+        elif drug_b_similars:
+            num_tta = min(3, len(drug_b_similars))
+            tta_ids, tta_weights = list(zip(*drug_b_similars[:num_tta]))
+
+            drug_a = [drug_a] * num_tta
+            drug_b = list(tta_ids)
+ 
+        else:
+            drug_a = [drug_a]
+            drug_b = [drug_b]
+            tta_weights = []
+
+        batch_labels = [self.y_test[idx]]
+
+        drug_a_features = []
+        drug_b_features = []
+        for _, feature in sorted(self.features.items()):
+            drug_a_features.append(self.get_drug_features(drug_a, feature))
+            drug_b_features.append(self.get_drug_features(drug_b, feature))
+
+        if len(drug_a_features) == 1:
+            drug_a_features = drug_a_features[0]
+
+        if len(drug_b_features) == 1:
+            drug_b_features = drug_b_features[0]
+
+        batch_labels = np.array(batch_labels).reshape(-1, 1)
+
+        return (drug_a_id, drug_b_id), ((drug_a_features, drug_b_features), batch_labels), tta_weights
+
+    def get_drug_features(self, drugs, feature):
+        drug_features = np.array([feature[drug] for drug in drugs])
+        return drug_features
+
 
 class NewOldTestDataset(Sequence):
 

@@ -13,7 +13,7 @@ from drug_interactions.features.get_features import get_features
 from drug_interactions.reader.reader import DrugReader
 from drug_interactions.datasets.dataset_builder import get_dataset, DatasetTypes
 from drug_interactions.training.train import Trainer
-from drug_interactions.training.evaluate import predict
+from drug_interactions.training.evaluate import predict, predict_tta
 from drug_interactions.models.model_builder import get_model
 from drug_interactions.utils.utils import send_message
 
@@ -82,9 +82,13 @@ def main():
 
     trainer.train(model, train_dataset, validation_dataset, epochs=3, dataset_type=dataset_type_str)
 
-    predict(model, test_new_old_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewOldChempropSimilar', save=True)
+    predict_tta(model, test_new_old_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/TTA', name='NEW_OLD', save=True)
 
-    predict(model, test_new_new_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewNewChempropSimilar', save=True)
+    predict_tta(model, test_new_new_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/TTA', name='NEW_NEW', save=True)
+    
+    # predict(model, test_new_old_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewOldChempropSimilar', save=True)
+
+    # predict(model, test_new_new_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewNewChempropSimilar', save=True)
 
 if __name__ == "__main__":
     main()

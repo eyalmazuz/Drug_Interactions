@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
-from drug_interactions.datasets.Datasets import TrainDataset, TestDataset, NewOldTestDataset, NewNewTestDataset, TTATestDataset
+from drug_interactions.datasets.Datasets import TrainDataset, TestDataset, NewOldTestDataset, NewNewTestDataset, TTATestDataset, TTANNTestDataset
 from drug_interactions.reader.dal import DrugBank
 
 class DatasetTypes(Enum):
@@ -41,13 +41,11 @@ def get_dataset(old_drug_bank: DrugBank,
     print('Creating validation set.')
 
     if kwargs["validation_size"] is not None:
-        x_train_pos, x_val_pos, y_train_pos, y_val_pos = train_test_split(pos_instances, pos_labels,
-                                                                        test_size=kwargs["validation_size"],
-                                                                        random_state=42, shuffle=True)
+        x_train_pos, x_val_pos, y_train_pos, y_val_pos = train_test_split(pos_instances, pos_labels, test_size=kwargs["validation_size"],
+        random_state=42, shuffle=True)
 
-        x_train_neg, x_val_neg, y_train_neg, y_val_neg = train_test_split(neg_instances, neg_labels,
-                                                                        test_size=kwargs["validation_size"],
-                                                                        random_state=42, shuffle=True)
+        x_train_neg, x_val_neg, y_train_neg, y_val_neg = train_test_split(neg_instances, neg_labels, test_size=kwargs["validation_size"],
+        random_state=42, shuffle=True)
 
     train_dataset = TrainDataset(pos=(x_train_pos, y_train_pos),
                                  neg=(x_train_neg, y_train_neg),
@@ -61,18 +59,23 @@ def get_dataset(old_drug_bank: DrugBank,
                                       batch_size=kwargs['batch_size'],
                                       neg_pos_ratio=kwargs["neg_pos_ratio"])
 
-    # test_new_old_dataset = TTATestDataset(path=f'{kwargs["data_path"]}/test_new_old_similar.csv',
+    test_new_old_dataset = TTATestDataset(path=f'{kwargs["data_path"]}/test_new_old_similar.csv',
+                               features=features,
+                               similar_map_path='./data/jsons/similar_drugs_dict_only_old.json',
+                               )
+
+    test_new_new_dataset = TTANNTestDataset(path=f'{kwargs["data_path"]}/test_new_new_similar.csv',
+                               features=features,
+                               similar_map_path='./data/jsons/similar_drugs_dict_only_old.json',
+                               )
+
+    # test_new_old_dataset = NewOldTestDataset(path=f'{kwargs["data_path"]}/test_new_old_chemprop_similar.csv',
     #                            features=features,
-    #                            similar_map_path='./data/jsons/similar_drugs_dict_only_old.json',
-    #                            )
+    #                            batch_size=kwargs["batch_size"],)
 
-    test_new_old_dataset = NewOldTestDataset(path=f'{kwargs["data_path"]}/test_new_old_chemprop_similar.csv',
-                               features=features,
-                               batch_size=kwargs["batch_size"],)
-
-    test_new_new_dataset = NewNewTestDataset(path=f'{kwargs["data_path"]}/test_new_new_chemprop_similar.csv',
-                               features=features,
-                               batch_size=kwargs["batch_size"])
+    # test_new_new_dataset = NewNewTestDataset(path=f'{kwargs["data_path"]}/test_new_new_chemprop_similar.csv',
+    #                            features=features,
+    #                            batch_size=kwargs["batch_size"])
 
     # test_all_dataset = TestDataset(path=f'{kwargs["data_path"]}/test_all_similar.csv',
     #                            features=features,
@@ -104,13 +107,13 @@ def get_train_test_pairs(old_drug_bank, new_drug_bank, save_path):
             new_old_labels += [1] if new_drug_bank.id_to_drug[drug_a].interacts_with(old_drug_bank.id_to_drug[drug_b]) else [0]
 
 
-        test_no_vals = [] 
+        test_no_vals = []
         for (drug_a, drug_b), label in zip(new_old_pairs, new_old_labels):
             smile_a = new_drug_bank.id_to_drug[drug_a].smiles
             smile_b = old_drug_bank.id_to_drug[drug_b].smiles
             test_no_vals.append((drug_a, smile_a, drug_b, smile_b, label))
 
-        test_no_df = pd.DataFrame(test_no_vals, columns=['Drug1_ID', 'Drug1_SMILES',
+            test_no_df = pd.DataFrame(test_no_vals, columns=['Drug1_ID', 'Drug1_SMILES',
                                                         'Drug2_ID', 'Drug2_SMILES',
                                                         'label'])
 

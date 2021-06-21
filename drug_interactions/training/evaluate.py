@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import  tensorflow as tf
 from tqdm import tqdm
@@ -49,27 +50,34 @@ def predict_tta(model, test_dataset, save: bool=True, **kwargs):
     """
     dataset_type = kwargs.pop('dataset_type')
     path = kwargs.pop('save_path')
+    name = kwargs.pop('name')
     print('Building test dataset.')
 
     drugs_a, drugs_b, predictions, labels = [], [], [], []
     print('Predicting on the test dataset.')
     send_message(f'{dataset_type} Predicting on the test dataset.')
-    
     for (new_drug_a, new_drug_b), (inputs, labels_batch), tta_weights in tqdm(test_dataset, leave=False):
+        
         preds = _test_step(model, inputs, **kwargs)
-        # calc tta average
-
         drugs_a += list([new_drug_a])
         drugs_b += list([new_drug_b])
-        predictions += [pred[0] for pred in preds.numpy().tolist()]
-        labels += [l[0] for l in labels_batch.tolist()]
-    
+            
+        # calc tta average
+        if tta_weights:
+            prediction = [pred[0] for pred in preds.numpy().tolist()]
+            prediction = [np.average(prediction, weights=tta_weights)]
+        else:
+            prediction = [pred[0] for pred in preds.numpy().tolist()]
+        # print(len(predictions))
+        predictions += prediction
+        labels += labels_batch.tolist()[0]
     send_message(f'{dataset_type} Finished test set')
+    print(len(drugs_a), len(drugs_b), len(labels), len(predictions))
     df = pd.DataFrame({'Drug1_ID': drugs_a, 'Drug2_ID': drugs_b, 'label': labels, 'prediction': predictions})
     if save:
-        df.to_csv(f'{path}/{dataset_type}.csv', index=False)
+        df.to_csv(f'{path}/{dataset_type}_{name}.csv', index=False)
 
-        calc_metrics(path, dataset_type)
+        calc_metrics(path, f'{dataset_type}_{name}')
 
     send_message(f'Finished {dataset_type}')
     # print(confusion_matrix(y_true=df.label.tolist(), y_pred=df['class'].tolist()))
