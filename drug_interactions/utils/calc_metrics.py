@@ -22,7 +22,21 @@ def calc_mrr(df):
  
     return mrr
 
-def calc_average_precision_k(df, k):
+def average_precision_at_k(k, class_correct):
+    # return average precision at k.
+    # more examples: https://github.com/benhamner/Metrics/blob/master/Python/ml_metrics/average_precision.py
+    # and: https://www.kaggle.com/c/avito-prohibited-content#evaluation
+    # class_correct is a list with the binary correct label ordered by confidence level.
+    score = 0.0
+    hits = 0.0
+    for i in range(k):
+        if class_correct[i] == 1:
+            hits += 1.0
+        score += hits / (i + 1.0)
+    score /= k
+    return score
+
+def calc_mean_average_precision_k(df, k):
     grouped_test = df.groupby('Drug1_ID')
     average_precision = 0.0
     for (_, smile_group) in tqdm(grouped_test, leave=False):
@@ -30,11 +44,12 @@ def calc_average_precision_k(df, k):
         try:
             y_true = np.array(smile_group.label.tolist())
             y_pred = np.array(smile_group['class'].tolist())
-            average_precision += precision_score(y_true=y_true[:k], y_pred=y_pred[:k], zero_division=0)
+            correct_preds = np.logical_and(y_true, y_pred).astype(np.int32)
+            average_precision += average_precision_at_k(k, correct_preds)
         except Exception:
             pass
     average_precision = round(average_precision / df["Drug1_ID"].nunique(), 4)
-    print(f'Average Precision@{k} {average_precision}', end=' ')
+    print(f'Mean Average Precision@{k} {average_precision}', end=' ')
 
     return average_precision
 
@@ -70,7 +85,7 @@ def calc_metrics(path: str, dataset_type: str, df: pd.DataFrame=None) -> None:
     df['class'] = df.prediction.progress_apply(lambda x: 1 if x > 0.5 else 0)
 
     for k in tqdm(top_k):
-        results[f"Average Precision@{k}"] = calc_average_precision_k(df, k)
+        results[f"Mean Average Precision@{k}"] = calc_mean_average_precision_k(df, k)
 
     print()
 

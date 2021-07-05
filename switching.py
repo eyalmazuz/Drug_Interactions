@@ -21,13 +21,13 @@ def main():
     test = load_df('./data/csvs/data/test_all_similar.csv')
 
     newold_model = 'AFMP'
-    newnew_model = 'CASTER'
+    newnew_model = 'AFMP'
 
-    dataset_type = f'{newold_model}_OLD_{newnew_model}_NEW_SWITCHING'
+    dataset_type = f'L{newold_model}_OLD_{newnew_model}_NEW_SWITCHING'
 
 
     old_new_df = pd.read_csv(f'./data/csvs/results/All_Data/NewOldSimilar/{newold_model}.csv')
-    new_new_df = pd.read_csv(f'./data/csvs/results/All_Data/NewNewSimilar/{newnew_model}.csv')
+    new_new_df = pd.read_csv(f'./data/csvs/results/All_Data/TTANewNew/{newnew_model}.csv')
 
     test = old_new_df.append(new_new_df)
 

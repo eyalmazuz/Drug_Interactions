@@ -50,7 +50,6 @@ def predict_tta(model, test_dataset, save: bool=True, **kwargs):
     """
     dataset_type = kwargs.pop('dataset_type')
     path = kwargs.pop('save_path')
-    name = kwargs.pop('name')
     print('Building test dataset.')
 
     drugs_a, drugs_b, predictions, labels = [], [], [], []
@@ -68,19 +67,18 @@ def predict_tta(model, test_dataset, save: bool=True, **kwargs):
             prediction = [np.average(prediction, weights=tta_weights)]
         else:
             prediction = [pred[0] for pred in preds.numpy().tolist()]
-        # print(len(predictions))
+
         predictions += prediction
         labels += labels_batch.tolist()[0]
     send_message(f'{dataset_type} Finished test set')
     print(len(drugs_a), len(drugs_b), len(labels), len(predictions))
     df = pd.DataFrame({'Drug1_ID': drugs_a, 'Drug2_ID': drugs_b, 'label': labels, 'prediction': predictions})
     if save:
-        df.to_csv(f'{path}/{dataset_type}_{name}.csv', index=False)
+        df.to_csv(f'{path}/{dataset_type}.csv', index=False)
 
-        calc_metrics(path, f'{dataset_type}_{name}')
+        calc_metrics(path, dataset_type)
 
     send_message(f'Finished {dataset_type}')
-    # print(confusion_matrix(y_true=df.label.tolist(), y_pred=df['class'].tolist()))
 
 @tf.function()
 def _test_step(model, inputs: tf.Tensor, **kwargs) -> None:
