@@ -82,13 +82,13 @@ def main():
 
     trainer.train(model, train_dataset, validation_dataset, epochs=3, dataset_type=dataset_type_str)
 
-    predict_tta(model, test_new_old_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/TTANewOld', save=True)
+    predict_tta(model, test_new_old_similar_dataset, dataset_type=f'L{dataset_type_str}', save_path='./data/csvs/results/All_Data/NewOldChempropSimilar', save=True)
 
-    predict_tta(model, test_new_new_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/TTANewNew', save=True)
+    predict_tta(model, test_new_new_similar_dataset, dataset_type=f'L{dataset_type_str}', save_path='./data/csvs/results/All_Data/NewNewChempropSimilar', save=True)
     
-    # predict(model, test_new_old_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewOldChempropSimilar', save=True)
+    # predict(model, test_new_old_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewOldNLCS', save=True)
 
-    # predict(model, test_new_new_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewNewChempropSimilar', save=True)
+    # predict(model, test_new_new_similar_dataset, dataset_type=dataset_type_str, save_path='./data/csvs/results/All_Data/NewNewNLCS', save=True)
 
 if __name__ == "__main__":
     main()

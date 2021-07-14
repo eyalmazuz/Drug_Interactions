@@ -207,6 +207,7 @@ class TTANNTestDataset(Sequence):
         path: str,
         features: Dict[str, Dict[str, np.ndarray]],
         similar_map_path: str,
+        k=3,
         ):
 
         self.test_data = pd.read_csv(path)
@@ -214,6 +215,8 @@ class TTANNTestDataset(Sequence):
 
         with open(similar_map_path, 'r') as f:
             self.similar_map = json.load(f)
+
+        self.k = k
 
         self.drug_a_list = self.test_data['Drug1_ID'].tolist()
         self.drug_b_list = self.test_data['Drug2_ID'].tolist()
@@ -233,7 +236,7 @@ class TTANNTestDataset(Sequence):
         drug_b_similars = self.similar_map[drug_b]
 
         if drug_a_similars and drug_b_similars:
-            num_tta = min(3, len(drug_a_similars), len(drug_b_similars))
+            num_tta = min(self.k, len(drug_a_similars), len(drug_b_similars))
             tta_a_ids, tta_a_weights = list(zip(*drug_a_similars[:num_tta]))
             tta_b_ids, tta_b_weights = list(zip(*drug_b_similars[:num_tta]))
 
@@ -246,14 +249,14 @@ class TTANNTestDataset(Sequence):
             drug_b = list(tta_b_ids)
 
         elif drug_a_similars:
-            num_tta = min(3, len(drug_a_similars))
+            num_tta = min(self.k, len(drug_a_similars))
             tta_ids, tta_weights = list(zip(*drug_a_similars[:num_tta]))
 
             drug_a = list(tta_ids)
             drug_b = [drug_b] * num_tta
             
         elif drug_b_similars:
-            num_tta = min(3, len(drug_b_similars))
+            num_tta = min(self.k, len(drug_b_similars))
             tta_ids, tta_weights = list(zip(*drug_b_similars[:num_tta]))
 
             drug_a = [drug_a] * num_tta
