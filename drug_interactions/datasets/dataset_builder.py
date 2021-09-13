@@ -61,12 +61,12 @@ def get_dataset(old_drug_bank: DrugBank,
 
     test_new_old_dataset = TTATestDataset(path=f'{kwargs["data_path"]}/test_new_old_similar.csv',
                                features=features,
-                               similar_map_path='./data/jsons/chemprop_similar_drugs_dict_only_old.json',
+                               similar_map_path='./data/jsons/similar_drugs_dict_only_old.json',
                                )
 
     test_new_new_dataset = TTANNTestDataset(path=f'{kwargs["data_path"]}/test_new_new_similar.csv',
                                features=features,
-                               similar_map_path='./data/jsons/chemprop_similar_drugs_dict_only_old.json',
+                               similar_map_path='./data/jsons/similar_drugs_dict_only_old.json',
                                )
 
     # test_new_old_dataset = NewOldTestDataset(path=f'{kwargs["data_path"]}/test_new_old_nlcs_similar.csv',

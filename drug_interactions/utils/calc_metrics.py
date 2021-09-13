@@ -17,10 +17,10 @@ def calc_mrr(df):
         else:
             mrr.append(1 / (first_hit.index[0] + 1))
  
-    mrr = round(np.array(mrr).mean(), 4)
+    mrr = np.array(mrr).mean()
     print(f'Test MRR: {mrr}')
  
-    return mrr
+    return round(mrr, 4)
 
 def average_precision_at_k(k, class_correct):
     # return average precision at k.
